@@ -1,0 +1,2819 @@
+/* ============================================================
+ * 健康记录 styles.css
+ *
+ * 视觉规范照我自己另外两个插件那套来（月历任务 / 闪念笔记）：
+ * 只用 Obsidian 主题变量、卡片靠一层薄阴影而不是描边分层、控件是一枚填了色的面
+ * （边框只在选中时亮一下）、圆角按 6 图标 / 8 控件 / 10 输入 / 12 卡片 分级，
+ * 999 只给页签和角标、50% 只给圆点和日历格、数字一律 tabular-nums、
+ * 强调色只走 --interactive-accent。
+ * 深色模式基本不写覆盖规则——颜色由主题变量自己变；只有"按类型色相
+ * 上色"的小色块需要在深色下提亮一档，那一处单独标了。
+ * ============================================================ */
+
+/* ---------- 变量：一份，五个容器共用 ----------
+ * 两个坑，都踩过：
+ * 1) 卡面和页面必须是"从对方推出来"的两层，而且**灰的那一层必须是卡片、不能是页面**。
+ *    这条踩过三个方向：早先卡面 = --background-primary，夜里它比侧栏容器还暗，卡片成了
+ *    背景上挖的洞；改成两档都拿 --background-secondary，日间同色（真机量到页面 #f6f6f6、
+ *    卡面 #f6f6f6），"看不到底色"是必然；再改成白卡压灰页（页面 = 白压黑 8%），差 21 档
+ *    是看得见，可整片页面底发灰——园长第六次反馈"这个灰灰的底色不好看"。
+ *    现在：页面 = 主题的 primary（日间就是白），卡面 = primary 压 6% 黑（#f0f0f0，差 15 档，
+ *    再吃一圈 10% 淡墨内描边）；夜里卡面 secondary、页面 primary，那副他认过。
+ *    输入框不吃这套——那是"井"，本来就该比周围暗。
+ * 2) --hr-* 必须同时挂在视图根、两个弹窗、日期/时间选择器和设置页上。Obsidian 的
+ *    弹窗内容挂在 body 下的 .modal-container 里，不在 .hr-root 内：以前只写 .hr-root，
+ *    弹窗里的按钮拿不到 --hr-fill（底色没了）、拿不到 --hr-radius-btn（圆角归 0），
+ *    同一副控件在侧栏里是胶囊、在弹窗里是方块——这就是"外边框不协调"的真正原因，
+ *    跟颜色无关。.ref/check-style.js 会盯着这条。 */
+.hr-root,
+.modal,
+.hr-modal,
+.hr-types,
+.hr-picker,
+.hr-settings {
+	/* 两层谁白谁灰这件事，方向比差值更要命。园长真机上一连两版都栽在这儿：
+	   ① 卡面 = 页面 = 主题的 secondary（#f6f6f6 vs #f6f6f6）→ 差值为零，"看不到底色"；
+	   ② 改成卡面 = 白、页面 = 白压黑 8%（#EBEBEB）→ 差 21 档是看得见，可整片页面底发灰，
+	      "这个灰灰的底色不好看"（2026-10-19 第六次反馈）。
+	   这轮把灰挪回它该在的地方：**页面就是主题的 primary（日间就是白），卡片自己压黑 6% 当卡面**。
+	   同样是 15 档的差，白页压灰卡一眼就分得清（卡片还带一圈 10% 淡墨内描边），
+	   灰页压白卡在发灰的屏幕上却等于没有底——上一版就是这么输的。
+	   夜里不跟着翻：暗色下主题的 secondary 本来就比 primary 亮一档，卡面 secondary、页面 primary
+	   就是"抬起的一张"，那副他认过，不动 */
+	--hr-canvas: var(--background-primary);
+	--hr-surface: color-mix(in srgb, var(--background-primary) 94%, #000000);
+	/* 发丝线不再直接吃主题的 --background-modifier-border（日间 #e4e4e4 压在白底上只有 11% 差，
+	   等于没有）；一律自己给一副按透明度算的淡墨，暗色块里换成反方向的淡白 */
+	--hr-edge: rgba(0, 0, 0, .14);
+	/* 输入框是"井"，要比卡面再暗一档：淡墨压在白卡面上，两个模式方向一致 */
+	--hr-well: rgba(0, 0, 0, .05);
+	/* 页签里"当前那一片"要比它所在的灰槽亮一档。淡白压在灰槽上，日间是近白的胶囊、
+	   夜里是比槽面亮起的胶囊——这一档不能拿卡面当，页签槽就在卡面旁边，同色等于没有选中 */
+	--hr-raise: rgba(255, 255, 255, .92);
+	--hr-sleep-h: 248;
+	--hr-pad: 12px;
+
+	/* 圆角只有四档：6 图标 / 8 控件 / 10 输入框 / 12 卡片。
+	   999 留给页签和角标，50% 给圆点和日历格。以前控件这里 999、那里 7px，
+	   同一排按钮三种体重，怎么看都是没对齐 */
+	--hr-radius-icon: 6px;
+	--hr-radius-btn: 8px;
+	--hr-radius-input: 10px;
+	--hr-radius-card: 12px;
+
+	/* 控件里的字统一 13；12 只给说明文字和字段标签；11 只给角标 */
+	--hr-fs-ctl: 13px;
+	--hr-fs-note: 12px;
+	--hr-fs-meta: 11px;
+	/* 数字专用字族（照他月历插件那条 .day-number 写的：'SF Pro Display' 打头）。
+	   以前所有数字都跟着正文的 'PingFang SC' 走，取到的是苹方自带的那套拉丁数字——
+	   比 SF 宽、比 SF 圆，一屏全是数字的插件上尤其明显。他月历里最显眼的那几个数
+	   本来就是 SF 打头，所以两个插件摆一起像换了家字体 */
+	--hr-num-font: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+	/* 控件高度只有两档：34 是屏上随手点的（页签、补记、修改、底部切换、小按钮），
+	   40 是弹窗里正式确认的（保存／取消那排）。以前 30/34/36/38/40 五种并存，
+	   同一行三个东西三种体重——园长说的"布局很不协调"有一半是这个。
+	   2026-10-19 追加：还有一半是 Obsidian 自己的 button:not(.clickable-icon)
+	   把所有按钮刷成同一个 #f6f6f6（权重 (0,1,1)，插件单类选择器打不过），
+	   现在靠 button. 前缀把颜色还回来；这条只在真机/带 app.css 的探针里看得见，
+	   量它的是 .ref/probe-appcss.js，改完按钮配色必须跑一遍 */
+	--hr-h-ctl: 34px;
+	--hr-h-formal: 40px;
+
+	/* 一屏之内的控件只有三档，别再开第四档：
+	   1 主行动 = 实心强调色，一晚只有一枚（记录今晚入睡 / 保存）
+	   2 次行动 = --hr-fill 填色面 + --text-muted（补记、修改、快速格子、底部切换）
+	   3 无声入口 = 无底无框无下划线 + --text-faint，只在悬停时浮出一层淡墨（管理类型）
+	   "选中"另说两种，各归各位：视图切换（今日/近7天、记录/明细）= 白胶囊浮在灰槽里；
+	   离散选项（时间芯片、图标、色相）= 淡强调色底 + 强调色字 + 一圈强调边 */
+	--hr-quiet-hover: rgba(0, 0, 0, .06);
+
+	/* 卡片的分层靠"一圈淡墨内描边 + 一层薄阴影"，不再只靠阴影：
+	   阴影在日间几乎不成形，在夜里干脆等于没有（黑压黑） */
+	--hr-shadow-card: inset 0 0 0 1px rgba(0, 0, 0, .10), 0 1px 2px rgba(0, 0, 0, .05);
+	--hr-shadow-lift: inset 0 0 0 1px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .10);
+	--hr-tint: color-mix(in srgb, var(--interactive-accent) 10%, transparent);
+	--hr-tint-strong: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
+
+	/* 照月历任务那套：控件是一枚填了色的面，不是一圈灰描边。
+	   填充面用**带透明度的墨/白**而不是 color-mix 混色：压在什么卡面上都是"比它重一档"，
+	   不用管卡面是白是灰是某个自定义主题给的颜色，也不会因为浏览器不认 color-mix 而整块透明 */
+	--hr-fill: rgba(0, 0, 0, .09);
+	--hr-fill-strong: rgba(0, 0, 0, .15);
+	--hr-on-edge: color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+
+	/* hover 只改这几样，而且把值做成变量：触屏没有 hover，点一下就永久停在 hover 态，
+	   以前是靠 @media (hover:none) 里再写一条"清空背景"补锅——那一手把控件本来该有的
+	   填色也一起清了，按下就变透明。现在直接把 hover 的取值改成静止态的值：
+	   填充面控件回到 --hr-fill，本来就是透明底的控件（日历格、翻页箭头、夜晚行）回到透明 */
+	--hr-fill-hover: var(--hr-fill-strong);
+	--hr-fg-hover: var(--text-normal);
+	--hr-ghost-hover: var(--background-modifier-hover);
+}
+
+body.theme-dark .hr-root,
+body.theme-dark .modal,
+body.theme-dark .hr-modal,
+body.theme-dark .hr-types,
+body.theme-dark .hr-picker,
+body.theme-dark .hr-settings {
+	/* 暗色下所有"淡墨"换成"淡白"：黑阴影压在深底上不显形，灰描边压在提亮过的卡面上是零差。
+	   两层方向反过来不需要重算：暗色下主题的 secondary 本来就比 primary 亮一档，
+	   卡面拿 secondary、页面拿 primary，园长认过的就是这副，不动 */
+	--hr-surface: var(--background-secondary);
+	--hr-canvas: var(--background-primary);
+	--hr-edge: rgba(255, 255, 255, .18);
+	--hr-well: rgba(0, 0, 0, .28);
+	/* 日间的"抬起"是近白（压在灰槽上就是白胶囊），夜里同一串值会瞎眼，换成淡白一档 */
+	--hr-raise: rgba(255, 255, 255, .18);
+	/* 卡片的分层换成同色 1px 内描边（悬停那圈亮一点） */
+	--hr-shadow-card: inset 0 0 0 1px rgba(255, 255, 255, .13);
+	--hr-shadow-lift: inset 0 0 0 1px rgba(255, 255, 255, .22);
+	/* 填充面抬到 10% / 17% 的淡白：暗色下这个量级才和日间的 9% / 15% 淡墨对得上，
+	   同一枚按钮两个模式一样清楚（以前混 12% 中灰只比容器亮 6 档，夜里瘪进背景） */
+	--hr-fill: rgba(255, 255, 255, .10);
+	--hr-fill-strong: rgba(255, 255, 255, .17);
+	/* 无声入口悬停那层底：夜里也得是淡白，淡墨压在深底上等于没反应 */
+	--hr-quiet-hover: rgba(255, 255, 255, .10);
+}
+
+/* 一律 border-box。不写这条的话 padding 和边框是"额外加"的：
+   flex-basis: 50% 算出的是内容宽，加上 1px 边框和 8px 内边距就超出容器，
+   两列统计会被挤成一列一个——明明只差 6 像素 */
+.hr-root,
+.hr-modal,
+.hr-types,
+.hr-picker,
+.hr-settings,
+.hr-root *,
+.hr-root ::before,
+.hr-root ::after,
+.hr-modal *,
+.hr-types *,
+.hr-picker *,
+.hr-settings * {
+	box-sizing: border-box;
+}
+
+.hr-root {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	/* 一页装到底：根容器自己不滚，滚的只可能是中间那块面板。
+	   以前整页可滚，复盘要看的东西全在折叠线以下，手机上打开永远只看见睡眠卡 */
+	height: 100%;
+	min-height: 0;
+	width: 100%;
+	box-sizing: border-box;
+	padding: var(--hr-pad);
+	overflow: hidden;
+	max-width: 100%;
+	background: var(--hr-canvas);
+	/* 字族顺序：系统字打头、中文字跟在后面。原来 'PingFang SC' 写在第一位，
+	   于是拉丁字母和数字也归苹方——iOS 上等于绕开了系统字，Windows 上绕开了 Segoe UI。
+	   他这轮说的"不是默认字体吧"就是这个：Obsidian 自己（app.css 的 body）走的是
+	   var(--font-interface)，即系统字打头。顺序反过来之后中文还是苹方／雅黑，
+	   拉丁与数字回到系统字，跟月历插件同一副观感 */
+	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+	font-size: 14px;
+	line-height: 1.45;
+	color: var(--text-normal);
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- 头部 ---------- */
+
+/* 本视图整页不滚，view-content 也就不需要滚 */
+.workspace-leaf-content[data-type="health-record-view"] .view-content {
+	overflow: hidden;
+	background: var(--hr-canvas);
+}
+
+/* 弹窗：卡片要浮起来，得连 .modal 外壳一起铺画布底。只给内容区铺会留一圈白框
+   （外壳自己有内边距），所以拿 :has() 打在外壳上。老 WebView 不认 :has() 时
+   退化成"白底白卡"，靠卡上那圈淡墨描边还分得清，不会整个看不见 */
+.modal:has(.hr-modal),
+.modal:has(.hr-types),
+.modal:has(.hr-picker) {
+	background: var(--hr-canvas);
+}
+
+.hr-header {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.hr-header-row {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	min-width: 0;
+}
+
+.hr-header-actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 6px;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.hr-tabs {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+}
+
+button.hr-tab {
+	appearance: none;
+	box-sizing: border-box;
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--hr-fs-ctl);
+	font-weight: 500;
+	line-height: 1;
+	min-height: var(--hr-h-ctl);
+	padding: 7px 14px;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: color .15s ease, background .15s ease;
+}
+
+button.hr-tab.is-active {
+	background: var(--hr-raise);
+	color: var(--text-normal);
+	font-weight: 600;
+}
+
+.hr-tab:active {
+	transform: scale(.96);
+}
+
+.hr-header-meta {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+	min-width: 0;
+}
+
+.hr-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-variant-numeric: tabular-nums;
+}
+
+button.hr-back-today {
+	appearance: none;
+	border: 1px solid transparent;
+	background: var(--hr-tint);
+	color: var(--interactive-accent);
+	font-size: var(--hr-fs-note);
+	font-weight: 500;
+	line-height: 1;
+	padding: 6px 10px;
+	border-radius: var(--hr-radius-btn);
+	cursor: pointer;
+	white-space: nowrap;
+	flex: 0 0 auto;
+}
+
+button.hr-text-btn {
+	appearance: none;
+	box-sizing: border-box;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	border: 1px solid transparent;
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-size: var(--hr-fs-ctl);
+	font-weight: 500;
+	line-height: 1;
+	min-height: var(--hr-h-ctl);
+	padding: 8px 12px;
+	border-radius: var(--hr-radius-btn);
+	cursor: pointer;
+	white-space: nowrap;
+	flex: 0 0 auto;
+	transition: background .15s ease, color .15s ease;
+}
+
+button.hr-text-btn:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+.hr-text-btn.is-small {
+	padding: 6px 10px;
+	font-size: var(--hr-fs-note);
+}
+
+.hr-text-btn-icon {
+	display: inline-flex;
+}
+
+.hr-text-btn-icon svg {
+	width: 14px;
+	height: 14px;
+	stroke-width: 2;
+}
+
+/* ---------- 翻页 ---------- */
+
+.hr-nav {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.hr-nav-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px;
+	border: 1px solid transparent;
+	/* 容器和里面的箭头同一套圆角：胶囊里塞方按钮就是他说的"不协调" */
+	border-radius: var(--hr-radius-card);
+	background: var(--hr-fill);
+	overflow: hidden;
+}
+
+button.hr-nav-btn {
+	appearance: none;
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+	width: 34px;
+	height: 34px;
+	border-radius: var(--hr-radius-btn);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease;
+}
+
+button.hr-nav-btn:hover {
+	background: var(--hr-ghost-hover);
+	color: var(--hr-fg-hover);
+}
+
+/* 翻页箭头：园长两轮都说小。第一轮 15→20 只解决了一半，这轮他指着整条日期切换器说
+   "相比于背景那个大方块，里面的数字和左右按钮都太小"——量出来是 148×46 的灰块里
+   装着 30×40 的格子和 12px 的字，占比不到三分之一。箭头 20→24、格子 30→34
+   （手机上 40，见下面 .is-mobile 那条），线宽跟着 2.25→2.5，别放大不加密 */
+.hr-nav-btn svg {
+	width: 24px;
+	height: 24px;
+	stroke-width: 2.5;
+}
+
+/* 这一段日期就是这一屏的标题，按他月历插件里 .month-title 那一档给：17px 不是、
+   这里取 16px／600，数字走 --hr-num-font（苹方那套拉丁数字偏宽偏圆，见 token 注释） */
+.hr-nav-label {
+	min-width: 0;
+	flex: 0 0 auto;
+	white-space: nowrap;
+	text-align: center;
+	font-family: var(--hr-num-font);
+	font-size: 16px;
+	font-weight: 600;
+	letter-spacing: .2px;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-hidden {
+	display: none !important;
+}
+
+/* ---------- 主体与卡片 ---------- */
+
+/* 面板区：整页里唯一会长短不一的一段，所以只有它会缩 */
+.hr-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.hr-panel > * {
+	/* 不许被 flex 压扁：压扁的内容既看不见也滚不到，会让人以为记录丢了 */
+	flex-shrink: 0;
+}
+
+.hr-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	flex: 1 1 auto;
+	min-height: 0;
+	/* 面板内部可以滚（明细一多就装不下），但整页不滚——滚动条出现在内容那一块，
+	   读起来是"这一叠记录在翻"，不是"这个应用在晃" */
+	overflow: hidden auto;
+	scrollbar-gutter: stable;
+}
+
+.hr-panel-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	flex-wrap: wrap;
+	flex: 0 0 auto;
+}
+
+.hr-panel-head .hr-chips {
+	flex-basis: 100%;
+}
+
+.hr-panel-note {
+	font-size: var(--hr-fs-note);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+	min-width: 0;
+}
+
+/* 第三档"无声入口"：无底、无框、也无下划线。
+   以前这里是一条带下划线的灰字——园长原话"你不觉得不好看吗"。下划线是链接的记号，
+   可这一屏里没有任何别的东西用下划线表意，它就成了唯一带下划线的一处；
+   再叠上 Obsidian 把按钮整片刷成灰胶囊（见文件头那条权重坑），等于"胶囊里再画一道线"。
+   现在只留淡字，悬停／按下浮出一层淡墨，触屏没有 hover 也靠同一层底给反馈 */
+button.hr-quiet-btn {
+	appearance: none;
+	box-sizing: border-box;
+	border: 0;
+	background: none;
+	background-image: none;
+	box-shadow: none;
+	padding: 5px 8px;
+	margin-right: -8px;
+	border-radius: var(--hr-radius-btn);
+	font-family: inherit;
+	font-size: var(--hr-fs-note);
+	line-height: 1;
+	letter-spacing: .2px;
+	color: var(--text-muted);
+	font-weight: 400;
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease;
+}
+
+button.hr-quiet-btn:hover,
+button.hr-quiet-btn:active {
+	background: var(--hr-quiet-hover);
+	color: var(--text-muted);
+}
+
+/* ---------- 底部切换条 ---------- */
+
+/* 它和顶上的 今日／近 7 天／近 30 天 是同一件事——切视图，所以必须是同一副样子：
+   灰槽里浮一枚白胶囊。以前这里是"一条分隔线 + 两个填色大方块，选中再换成强调色"，
+   同一屏里两套选中语言并排，园长说的"其他布局也很不协调"最扎眼的一处就是它。
+   分隔线一起去掉：槽本身已经有底，线在上面是多余的第二次装饰 */
+.hr-seg {
+	flex: 0 0 auto;
+	display: flex;
+	gap: 2px;
+	margin-top: 6px;
+	padding: 3px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+}
+
+button.hr-seg-btn {
+	appearance: none;
+	box-sizing: border-box;
+	flex: 1 1 0;
+	min-width: 0;
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+	font-family: inherit;
+	font-size: var(--hr-fs-ctl);
+	font-weight: 500;
+	line-height: 1;
+	min-height: var(--hr-h-ctl);
+	padding: 0 6px;
+	border-radius: 999px;
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease;
+}
+
+button.hr-seg-btn:hover {
+	color: var(--hr-fg-hover);
+}
+
+/* 视图切换的选中态＝胶囊抬起一档（和页签同一副）；
+   离散选项（时间芯片、图标、色相）的选中态＝淡强调色底＋强调色字＋一圈强调边。
+   两种各自统一，不再在同一屏里混着出现 */
+button.hr-seg-btn.is-on {
+	background: var(--hr-raise);
+	color: var(--text-normal);
+	font-weight: 600;
+}
+
+.hr-card {
+	background: var(--hr-surface);
+	border: 1px solid transparent;
+	box-shadow: var(--hr-shadow-card);
+	border-radius: var(--hr-radius-card);
+	padding: 12px 14px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.hr-card:hover {
+	box-shadow: var(--hr-shadow-lift);
+}
+
+.hr-section {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	/* 面板里唯一会长的一段就是这一节，剩下的空间归它，
+	   下面的网格才有高度可摊——否则今日页永远底下空一片。只长不缩 */
+	flex: 1 0 auto;
+	min-height: 0;
+}
+
+.hr-section-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 4px 8px;
+}
+
+.hr-section-title {
+	font-size: var(--hr-fs-ctl);
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+.hr-section-hint {
+	font-size: var(--hr-fs-meta);
+	color: var(--text-faint);
+	line-height: 1.5;
+}
+
+.hr-section-count {
+	min-width: 20px;
+	height: 20px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+	font-size: var(--hr-fs-meta);
+	font-weight: 600;
+	line-height: 20px;
+	text-align: center;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 睡眠主卡 ---------- */
+
+/* 这一张卡四个角都要有东西：
+     左上＝睡了多久  右上＝改这一条的入口  左下＝入睡→起床那串时刻  右下＝今晚还要点的那一下
+   演进过四版：① 全靠左、主按钮撑满一行（园长："入睡那个也全都靠左排布了"）；
+   ② 数字在左、动作竖排在右——两枚按钮一竖排就把卡片顶到一百七十多 px 高，中间一大片空
+   （园长："把睡眠记录的框变窄一点"）；③ 动作横排回底部一行，卡片剩两行——可他这轮指着截图说
+   "修改的左面和记录睡眠的右上角，也就是左下和右上，目前都是空着的"：两枚按钮挤在右下角，
+   芯片单独占一行靠左，中间还劈成三行；④ 现在这样——「修改」提到右上角当轻量入口，
+   右下角只留今晚真要点的那一下，芯片守在左下，一行两样、四个角不空。
+   内边距 12/14→10/12，芯片和按钮同一基线 */
+.hr-sleep-card {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+	padding: 10px 12px;
+}
+
+/* 第一行：数字那一栏吃掉剩余宽度，右上角那枚入口贴右 */
+.hr-sleep-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.hr-sleep-main {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.hr-sleep-edit {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-left: auto;
+}
+
+.hr-sleep-foot {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.hr-sleep-acts {
+	display: flex;
+	align-items: center;
+	flex: 0 0 auto;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-left: auto;
+}
+
+/* 动作里的字不许折行：一折行卡片就被撑歪，两枚按钮还会错开半格 */
+.hr-sleep-acts .hr-btn,
+.hr-sleep-edit .hr-btn {
+	white-space: nowrap;
+}
+
+.hr-sleep-top {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+/* 28px 只给这一个英雄数字；别处最大的是时间选择器那个 20px 读数。
+   数字一律走 --hr-num-font（系统数字），中文说明继续吃正文那套 */
+.hr-sleep-value {
+	font-family: var(--hr-num-font);
+	font-size: 28px;
+	font-weight: 600;
+	line-height: 1;
+	letter-spacing: -.5px;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-sleep-value-sub {
+	font-size: 14px;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--text-muted);
+	margin-left: 3px;
+}
+
+.hr-sleep-unit {
+	font-size: var(--hr-fs-ctl);
+	color: var(--text-muted);
+}
+
+/* 左下角那格说明文字：没记的那一态没有时刻芯片，就拿它占住芯片的位置，
+   免得右下角一枚孤零零的按钮浮在空行上 */
+.hr-sleep-hint {
+	flex: 1 1 140px;
+	min-width: 0;
+	font-size: var(--hr-fs-note);
+	color: var(--text-faint);
+	line-height: 1.5;
+}
+
+.hr-sleep-warn {
+	font-size: var(--hr-fs-note);
+	line-height: 1.5;
+	padding: 6px 9px;
+	border-radius: var(--hr-radius-btn);
+	background: color-mix(in srgb, var(--color-red) 12%, transparent);
+	color: var(--color-red);
+}
+
+/* 只是显示"入睡 23:40"，但和旁边的修改按钮必须同一副体重 */
+.hr-time-chip {
+	display: inline-flex;
+	align-items: center;
+	font-size: var(--hr-fs-ctl);
+	line-height: 1;
+	padding: 7px 10px;
+	border-radius: var(--hr-radius-btn);
+	border: 1px solid transparent;
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 按钮 ---------- */
+
+.hr-btn {
+	appearance: none;
+	border: 1px solid transparent;
+	border-radius: var(--hr-radius-input);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	min-height: 40px;
+	padding: 9px 18px;
+	font-size: 14px;
+	font-weight: 600;
+	line-height: 1.4;
+	cursor: pointer;
+	transition: all .2s ease;
+}
+
+.hr-btn:active {
+	transform: scale(.96);
+}
+
+.hr-btn-icon {
+	display: inline-flex;
+}
+
+.hr-btn-icon svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2;
+}
+
+button.hr-btn-primary {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.hr-btn-primary:hover {
+	opacity: .9;
+}
+
+button.hr-btn-ghost {
+	/* 取消这种次按钮原来是"白底 + 一圈灰边"，跟旁边填了色的控件两种做法。
+	   这里也改成填色面，边框交还给选中态用 */
+	background: var(--hr-fill);
+	border: 1px solid transparent;
+	color: var(--text-muted);
+	font-weight: 500;
+}
+
+button.hr-btn-ghost:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+button.hr-btn-inline {
+	/* 和左边的时间芯片同一副尺寸，否则一行里三个东西三种体重。
+	   必须带 button. 前缀：单类权重 (0,1,0) 输给 app.css 的 button:not(.clickable-icon) (0,1,1)，
+	   这处是 2026-10-19 抢色探针补量 today-full 那张时才抓出来的漏网——同一行里
+	   「记录今晚入睡」是淡强调色、「修改」却被刷成主题的 #f6f6f6，比灰卡面还亮一档 */
+	min-height: 0;
+	padding: 7px 10px;
+	font-size: var(--hr-fs-ctl);
+	font-weight: 400;
+	border-radius: var(--hr-radius-btn);
+	background: var(--hr-fill);
+	border: 1px solid transparent;
+	color: var(--text-muted);
+}
+
+/* 这里原来有一条 .is-accent 强调色面，专门给「记录今晚入睡」。
+   2026-10-19 晚他把那一记降成次级入口（"这个按钮做得这么大，作用却这么小"），
+   类名就不再有使用处，整条删掉，免得以后有人把它当"主按钮"又捡回去 */
+
+/* ---------- 快记网格 ---------- */
+
+.hr-quick-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	/* 网格吃掉面板剩下的所有高度：不然今日页下面一大片空白。只长不缩——
+	   缩了内容会溢出自己的盒子、压在下一个元素上 */
+	flex: 1 0 auto;
+	/* 上限 92px：一格是"图标 28 + 间 4 + 两行字"，一行时留白、两行时正好装下。
+	   2026-10-20 他指着格子下边框说"字显示不全"——一行名字也被切，根因是字标签
+	   的 line-height 1.1 配 overflow:hidden，16px 汉字的下缘溢出行盒被裁掉。
+	   行高改 1.25、上限 84→92（今日页那片空白本来就留在网格里，不挤别处）。
+	   再高就是空：试过 1fr 摊到 130，图标和字浮在半空，比空白更难看 */
+	grid-auto-rows: minmax(72px, 92px);
+	align-content: start;
+	/* 10px 和面板、卡片内部同一套间距；以前这里是 8，一格一格看着就是没对齐 */
+	gap: 10px;
+}
+
+button.hr-quick {
+	--hue: 210;
+	position: relative;
+	appearance: none;
+	border: 1px solid transparent;
+	box-shadow: var(--hr-shadow-card);
+	background: var(--hr-surface);
+	border-radius: var(--hr-radius-card);
+	/* app.css 有一条 button { height: var(--input-height) }（30px）：格子是网格项，
+	   一旦有确定高度就不再被行拉伸，只剩 min-height 60 撑着——图标和字被挤成椭圆、截断。
+	   真机上这一条只有在加载了 app.css 时才看得见，预览页里一直是对的 */
+	height: 100%;
+	min-height: 60px;
+	padding: 8px 6px 9px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: all .2s ease;
+}
+
+.hr-quick:hover {
+	box-shadow: var(--hr-shadow-lift);
+}
+
+.hr-quick:active {
+	transform: scale(.96);
+}
+
+/* 每格都带自己那一点色相：以前"没记过的格子不给圆底"，六个格子在日间的白底上
+   就只剩六个淡灰图标——他原话"日间看不到底色"。淡到 12% 的色相底不至于糊成一片，
+   但每一格一眼就知道是水还是饭；记过之后同一枚圆底加厚、再套一圈同色环 */
+/* 深浅表意（园长这轮选的）：格子铺一层自己那枚色相，记一次深一档、四档封顶，
+   不再在角上压一枚实心数字圆徽。用 ::before 而不是直接改 background，是为了
+   让色相层压在卡面之上、图标和字之下，卡面那圈内描边也不被盖掉。
+   2026-10-19 晚这一版：一档从 5% 提到 15%。他原话"颜色变化其实并不是很明显"，
+   并点出逻辑症结——大多数类型一天就那么两三次，五档里能用到前三档就不错，
+   每档差 5% 在日间白底上等于没有。现在 15/30/45/60 四档，记一次就看得出来，
+   两次翻倍。色相仍是每格各自的，不会糊成一片同色块（那是再上一版的坑） */
+.hr-quick::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	background: hsl(var(--hue) 55% 50% / calc(var(--hr-quick-level, 0) * .15));
+	transition: background .15s ease;
+}
+
+/* 深色底吃同样的透明度会糊成一团，档差要再大一点、色相再亮一点才拉得开 */
+body.theme-dark .hr-quick::before {
+	background: hsl(var(--hue) 62% 62% / calc(var(--hr-quick-level, 0) * .13));
+}
+
+.hr-quick-icon {
+	display: inline-flex;
+	position: relative;
+	z-index: 1;
+	/* 不许被压：行高不够时它会被 flex 压成椭圆（他手机上看到的"显示不全"就是这颗被压扁的圆） */
+	flex: 0 0 auto;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	align-items: center;
+	justify-content: center;
+	background: hsl(var(--hue) 55% 50% / .12);
+	color: var(--text-muted);
+	transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.hr-quick-icon svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2;
+}
+
+/* 名字写全：以前这里吃的是两字缩写，六七个字的类型永远只看到头两个字
+   （他在管理里建了长名字，回来发现格子上认不出是哪一个）。最长 8 字，
+   两行装得下；真到第三行就截断，别把 84px 的格子撑破 */
+.hr-quick-label {
+	position: relative;
+	z-index: 1;
+	max-width: 100%;
+	font-size: var(--hr-fs-ctl);
+	font-weight: 500;
+	/* 1.35 而不是 1.1：汉字在 1.1 的行盒里下缘会被 overflow:hidden 裁掉，
+	   他看到的"下边框那块显示不全"就是这个。实测 14px 字一行要 18px 才不裁
+	   （1.25 仍差 1px），1.35 → 18.9；两行 37.8 也装得进 92 的格子 */
+	line-height: 1.35;
+	text-align: center;
+	/* 两行时让两行长度接近，别把最后一个字单独甩到第二行；
+	   WebView 不认这条就按普通折行，不影响显示 */
+	text-wrap: balance;
+	overflow-wrap: anywhere;
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+/* 记过了 = 文字提到正常色 + 图标那一圈加厚；深浅由 .hr-quick::before 那一层负责 */
+.hr-quick.is-done {
+	color: var(--text-normal);
+}
+
+/* 夜里最深那两档压上来之后，正文色落在色块上只剩 3.8:1——顶到最亮那档时
+   把字也提成带一点自己色相的近白（4.6:1），不然记了三次的格子反而更难读 */
+body.theme-dark .hr-quick.is-done {
+	color: hsl(var(--hue) 45% 94%);
+}
+
+/* 图标仍然带自己的色相，用来区分"这是水还是饭" */
+.hr-quick.is-done .hr-quick-icon {
+	background: hsl(var(--hue) 58% 48% / .26);
+	color: hsl(var(--hue) 65% 33%);
+	box-shadow: inset 0 0 0 1px hsl(var(--hue) 55% 45% / .38);
+}
+
+/* 深色底上同一组色相会沉下去，这里整体提亮一档 */
+body.theme-dark .hr-quick.is-done .hr-quick-icon,
+body.theme-dark .hr-item-icon {
+	color: hsl(var(--hue) 62% 76%);
+}
+
+/* 圆底也要跟着换配方：按白卡调的那一档（48% 亮度的色相铺 26%）压到暗色卡面上几乎不成形。
+   淡白档抬一档、更亮的色相铺更厚一层，两个模式才看得出同一件事 */
+body.theme-dark .hr-quick-icon {
+	background: hsl(var(--hue) 62% 62% / .16);
+}
+
+body.theme-dark .hr-quick.is-done .hr-quick-icon,
+body.theme-dark .hr-type-icon {
+	background: hsl(var(--hue) 62% 64% / .32);
+}
+
+body.theme-dark .hr-quick.is-done .hr-quick-icon {
+	box-shadow: inset 0 0 0 1px hsl(var(--hue) 62% 72% / .45);
+}
+
+/* 类型没注册的那几行：看得见、说得清为什么不算数 */
+.hr-item.is-unknown .hr-item-text {
+	color: var(--text-muted);
+}
+
+.hr-item-tag {
+	flex: 0 0 auto;
+	font-size: 11px;
+	padding: 2px 6px;
+	border-radius: 999px;
+	border: 1px dashed var(--background-modifier-border-hover);
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+/* ---------- 今日明细 ---------- */
+
+.hr-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.hr-item {
+	--hue: 210;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 9px 12px;
+	border-radius: 10px;
+	background: var(--hr-surface);
+	border: 1px solid transparent;
+	box-shadow: var(--hr-shadow-card);
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.hr-item:hover {
+	border-color: color-mix(in srgb, var(--interactive-accent) 40%, var(--hr-edge));
+	box-shadow: var(--hr-shadow-lift);
+}
+
+/* 缺口面板的第一列写的是日期，比 HH:MM 宽 */
+.hr-item.is-gap .hr-item-time {
+	width: auto;
+	min-width: 54px;
+}
+
+.hr-item-time {
+	font-size: 12px;
+	line-height: 1;
+	color: var(--text-muted);
+	width: 40px;
+	flex: 0 0 auto;
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-item-icon {
+	display: inline-flex;
+	width: 18px;
+	flex: 0 0 auto;
+	color: hsl(var(--hue) 52% 46%);
+}
+
+.hr-item-icon svg {
+	width: 15px;
+	height: 15px;
+	stroke-width: 2;
+}
+
+.hr-item-text {
+	flex: 1;
+	min-width: 0;
+	font-size: 14px;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hr-item-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: var(--hr-radius-icon);
+	color: var(--text-faint);
+	cursor: pointer;
+	flex: 0 0 auto;
+	opacity: 0;
+	transition: opacity .15s ease, background .15s ease, color .15s ease;
+}
+
+.hr-item:hover .hr-item-btn {
+	opacity: 1;
+}
+
+.hr-item-btn:hover {
+	background: var(--hr-ghost-hover);
+	color: var(--hr-fg-hover);
+}
+
+.hr-item-del:hover {
+	color: var(--color-red);
+}
+
+/* 删除第一下只是"上膛"：图标染红、整行描边转红，三秒不动自动复位 */
+.hr-item-del.is-armed {
+	color: var(--color-red);
+	background: color-mix(in srgb, var(--color-red) 16%, transparent);
+}
+
+.hr-item.is-arming {
+	border-color: color-mix(in srgb, var(--color-red) 35%, var(--hr-edge));
+}
+
+.hr-item-btn svg {
+	width: 14px;
+	height: 14px;
+	stroke-width: 2;
+}
+
+/* ---------- 趋势图：指标芯片与折线 ---------- */
+
+.hr-chips {
+	display: flex;
+	gap: 5px;
+	flex-wrap: wrap;
+}
+
+/* 手机上芯片收成一行、横向自己滑。两行芯片是"次数"这块面板最大的吃高项
+   （实测 115px，一整块图才 234px），而它只是切指标，不需要一眼看全七个；
+   收成一行后同一屏里次数／计数／缺口都能和睡眠一样装到底、不用上下滑 */
+.is-mobile .hr-chips {
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	padding-bottom: 1px;
+}
+
+.is-mobile .hr-chips::-webkit-scrollbar {
+	display: none;
+}
+
+.is-mobile .hr-chips .hr-chip {
+	flex: 0 0 auto;
+}
+
+button.hr-chip {
+	appearance: none;
+	border: 1px solid transparent;
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-size: var(--hr-fs-ctl);
+	font-weight: 500;
+	line-height: 1;
+	padding: 7px 11px;
+	border-radius: var(--hr-radius-btn);
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+button.hr-chip:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+button.hr-chip.is-on {
+	background: var(--hr-tint-strong);
+	border-color: var(--hr-on-edge);
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.hr-tl-host {
+	/* 没有这一段的话，网格的 1fr 行高对一个 auto 高度的父元素去分配，
+	   等于根本不摊——图缩成顶部一小条，下面全是空的 */
+	flex: 1 1 auto;
+	min-height: 140px;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+
+.hr-trend-host {
+	width: 100%;
+	/* 折线／柱子跟着面板给的那点高度长：图终于有高度，而不是卡片里那 132px 的一条缝。
+	   这处是上面 `.hr-panel > * { flex-shrink: 0 }` 唯一的例外——那条规矩防的是
+	   "内容被压扁又滚不到"，而 SVG 是按容器尺寸现画的（renderTrend 读 getBoundingClientRect），
+	   压矮等于少画两格参考线，不会丢信息。地板从 150 降到 130：再矮柱顶数字就贴着轴了 */
+	flex: 1 1 auto;
+	min-height: 130px;
+}
+
+.hr-trend {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+.hr-trend-grid {
+	stroke: var(--hr-edge);
+	stroke-width: 1;
+}
+
+.hr-trend-axis {
+	font-family: var(--hr-num-font);
+	font-size: 11px;
+	fill: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 折线用强调色而不是类型色：一条线代表"当前看的那个指标"，换指标不该换颜色 */
+.hr-trend-line {
+	fill: none;
+	stroke: var(--interactive-accent);
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	vector-effect: non-scaling-stroke;
+}
+
+.hr-trend-dot {
+	fill: var(--hr-surface);
+	stroke: var(--interactive-accent);
+	stroke-width: 2;
+	cursor: pointer;
+	vector-effect: non-scaling-stroke;
+}
+
+.hr-trend-dot.is-today {
+	fill: var(--interactive-accent);
+}
+
+/* 柱子走同一枚强调色：换指标不该换颜色，跟折线那版一个道理。
+   当天那根实心、其余淡一档，一眼就知道"今天这根是活的" */
+.hr-trend-bar {
+	fill: var(--interactive-accent);
+	opacity: .55;
+	cursor: pointer;
+}
+
+.hr-trend-bar.is-today {
+	opacity: 1;
+}
+
+/* 柱顶的次数：快记格子那枚数字角标撤了之后，精确数就靠这里和明细 */
+.hr-trend-val {
+	font-family: var(--hr-num-font);
+	font-size: 12px;
+	fill: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-trend-val.is-today {
+	fill: var(--interactive-accent);
+	font-weight: 600;
+}
+
+/* 没记的那一天：底线上留一道淡痕，别让"漏记"看起来像"没有这一天" */
+.hr-trend-none {
+	stroke: var(--hr-edge);
+	stroke-width: 2;
+	stroke-linecap: round;
+}
+
+.hr-trend-empty {
+	font-size: 12px;
+	fill: var(--text-faint);
+}
+
+/* ---------- 睡眠区间条 ---------- */
+
+/* 三列：哪天 / 条画在哪儿 / 读数。轴头也走同一套列，刻度才压得准。
+   读数列出的是几点睡几点醒，正是要看的东西，所以让它自己撑宽（auto），
+   定宽会把 "22:24 → 03:36" 省略成 "23:40 →…"。
+   行高用 minmax(基准, 1fr)：面板给了多少高度就摊成多少，一周七行时
+   一行能有五六十像素，条终于看得清；一个月三十行时退回基准高度，面板自己滚 */
+.hr-tl {
+	--hr-tl-label: 26px;
+	--hr-tl-steps: 6;
+	--hr-tl-rows: 7;
+	display: grid;
+	grid-template-columns: var(--hr-tl-label) minmax(0, 1fr) auto;
+	/* 行高 = 面板高度 / 行数：一周七行摊满，一个月三十行也摊满，
+	   这一屏永远不需要上下滚。条本身有高度上限（下面 .hr-tl-bar），
+	   所以只有一行时也不会出现"一根条占满半页" */
+	/* 下限 24px：一周七行照样摊满半屏，一个月三十行不再把字挤叠——
+	   装不下就让面板自己滚，他说得很清楚：7 天不滚，30 天可以滚 */
+	grid-template-rows: auto repeat(var(--hr-tl-rows), minmax(24px, 1fr));
+	column-gap: 8px;
+	row-gap: 0;
+	align-items: center;
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+/* 一个月三十几行：列距收紧（行高另有下限，压不下去就不滚） */
+.hr-tl.is-dense {
+	column-gap: 6px;
+}
+
+/* 行本身不成盒，三个单元格直接落进网格，列宽才对得齐（和计数矩阵一个办法） */
+.hr-tl-row {
+	display: contents;
+}
+
+.hr-tl-day {
+	font-size: 12px;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-tl-row.is-today .hr-tl-day,
+.hr-tl-row.is-today .hr-tl-val {
+	color: var(--interactive-accent);
+}
+
+.hr-tl-track {
+	position: relative;
+	height: 100%;
+	align-self: stretch;
+	min-width: 0;
+	cursor: pointer;
+	/* 竖格线画在每一行自己的背景上。画在卡片上出过事：卡片是 flex，
+	   绝对定位的线一路窜到下面那张卡里去了。
+	   第二层补上轴末端那根线——重复渐变只画到最后一格之前，右边框不上去 */
+	background-image: repeating-linear-gradient(to right,
+		var(--hr-edge) 0 1px,
+		transparent 1px calc(100% / var(--hr-tl-steps))),
+		linear-gradient(to right, transparent calc(100% - 1px), var(--hr-edge) calc(100% - 1px));
+}
+
+.hr-tl-row:hover .hr-tl-track,
+.hr-tl-track:hover {
+	background-color: var(--hr-ghost-hover);
+}
+
+/* 一根条 = 一觉。深浅就是睡了多久 */
+.hr-tl-bar {
+	position: absolute;
+	left: var(--left, 0%);
+	width: var(--w, 0%);
+	top: 50%;
+	transform: translateY(-50%);
+	height: clamp(8px, 52%, 26px);
+	min-width: 3px;
+	border-radius: 4px;
+	background: hsl(var(--hr-sleep-h) 58% 55% / calc(.3 + .65 * var(--hr-level, .45)));
+}
+
+/* 只记了入睡、起床还空着：条画成虚的，意思是"这段时间不知道"，不是"睡了这么久" */
+/* 深色底上按色相上色的小色块要提亮一档，否则最短那晚的条几乎看不见
+   （和快记角标、明细图标同一个处理）；虚条另有自己的底纹，不参与 */
+body.theme-dark .hr-tl-bar:not(.is-pending) {
+	background: hsl(var(--hr-sleep-h) 62% 66% / calc(.45 + .5 * var(--hr-level, .45)));
+}
+
+.hr-tl-bar.is-pending {
+	background: repeating-linear-gradient(115deg,
+		hsl(var(--hr-sleep-h) 58% 55% / .45) 0 4px,
+		hsl(var(--hr-sleep-h) 58% 55% / .1) 4px 8px);
+	box-shadow: inset 0 0 0 1px hsl(var(--hr-sleep-h) 58% 55% / .5);
+}
+
+.hr-tl-ruler {
+	position: relative;
+	height: 14px;
+}
+
+.hr-tl-tick {
+	position: absolute;
+	left: var(--pos, 0%);
+	transform: translateX(-50%);
+	font-size: 11px;
+	line-height: 14px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 首尾两个刻度贴着边往里靠：居中会把"18"和最后一个钟点甩出轨道外各半个字，
+   看着是小毛病，但它撑出了 scrollWidth，手机上就是一层看不见的横向滚动 */
+.hr-tl-tick:first-child {
+	transform: none;
+}
+
+.hr-tl-tick:last-child {
+	transform: translateX(-100%);
+}
+
+.hr-tl-val {
+	/* 撑宽但不许越界：第三列是 auto，给多少内容吃多少，极端情况下 1fr 的轴会被压成 0 */
+	max-width: 9.5em;
+	font-size: 12px;
+	color: var(--text-normal);
+	text-align: right;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-tl-val.is-off {
+	color: var(--text-faint);
+}
+
+/* 整周/整月还没到的那一页：一句说明就够，不铺一屏空表格 */
+.hr-card.hr-page-empty {
+	text-align: center;
+	font-size: 12px;
+	color: var(--text-faint);
+	padding: 18px 10px;
+}
+
+/* ---------- 计数矩阵 ---------- */
+
+.hr-matrix {
+	--hr-cols: 5;
+	display: grid;
+	/* 每列给 40px 地板：15 个类型挤进 300px 时每列只剩 16px，两位数被裁、列头只剩色点。
+	   余量够时照旧由 1fr 摊开；不够就横向滑 */
+	grid-template-columns: 22px repeat(var(--hr-cols), minmax(40px, 1fr));
+	grid-auto-rows: minmax(24px, 1fr);
+	gap: 3px;
+	align-items: center;
+	/* 计数这块也要装到底：有余量就把行摊开填满（1fr），不够时行最多收到 24px，
+	   再不够才让它滚——24 是"数字加上下各留一点气"的地板，压到比这更矮字就糊了 */
+	flex: 1 1 auto;
+	align-content: stretch;
+	overflow-x: auto;
+}
+
+/* 行用 display:contents，让单元格直接落进上面的网格，列宽才对得齐 */
+/* 类型多到要横向滑时：色点让位给字（否则 3 个字只剩 2 个），星期列钉在左边不跟着滑走 */
+.hr-matrix.is-many .hr-mx-head-cell::before {
+	display: none;
+}
+
+.hr-matrix.is-many .hr-mx-head-cell {
+	font-size: 10px;
+}
+
+.hr-matrix.is-many .hr-mx-label {
+	position: sticky;
+	left: -1px;
+	z-index: 1;
+	background: var(--background-primary);
+}
+
+.hr-mx-row {
+	display: contents;
+}
+
+.hr-mx-label {
+	font-size: 12px;
+	color: var(--text-muted);
+	padding: 3px 0;
+}
+
+.hr-mx-row.is-today .hr-mx-label {
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.hr-mx-head-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+	font-size: 11px;
+	color: var(--text-muted);
+	padding-bottom: 4px;
+	min-width: 0;
+}
+
+/* 列头带一个小色点，靠它把中性的数字列对回各自的类型 */
+.hr-mx-head-cell::before {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+	background: hsl(var(--hue, 210) 55% 50%);
+}
+
+.hr-mx-head-text {
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hr-mx-cell {
+	min-width: 0;
+	overflow: hidden;
+	text-align: center;
+	font-size: 12px;
+	line-height: 1;
+	padding: 7px 2px;
+	border-radius: var(--hr-radius-icon);
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-mx-cell.is-zero {
+	background: transparent;
+	color: var(--text-faint);
+}
+
+/* ---------- 统计条 ---------- */
+
+/* 用 flex 而不是 grid：grid 的 auto-fit 在 3 个指标时会给最后一格留半行空白，
+   flex 让末位自己撑满，永远不留孤儿格 */
+.hr-stats {
+	display: flex;
+	flex-wrap: wrap;
+	flex: 0 0 auto;
+	gap: 6px;
+}
+
+/* 今日页没有区间统计，这条整个让位，不留一道空边框 */
+.hr-stats:empty {
+	display: none;
+}
+
+.hr-stat {
+	flex: 1 1 96px;
+	/* 不写 border-box 的话 flex-basis 是内容宽，加上内边距就超出 50%，
+	   手机上的"两列统计"会被挤成一行一个 */
+	box-sizing: border-box;
+	background: var(--hr-surface);
+	border: 1px solid transparent;
+	box-shadow: var(--hr-shadow-card);
+	border-radius: var(--hr-radius-card);
+	padding: 10px 8px;
+	text-align: center;
+	min-width: 0;
+}
+
+.hr-stat-value {
+	font-family: var(--hr-num-font);
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.3;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-stat-label {
+	font-size: 11px;
+	color: var(--text-faint);
+	margin-top: 2px;
+	white-space: nowrap;
+}
+
+/* ---------- 本月最短 / 缺口 ---------- */
+
+.hr-rank {
+	display: flex;
+	flex-direction: column;
+}
+
+.hr-rank-row {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	font-size: 13px;
+	padding: 7px 0;
+	border-bottom: 1px solid var(--hr-edge);
+}
+
+.hr-rank-row:last-child {
+	border-bottom: 0;
+}
+
+.hr-rank-date {
+	color: var(--text-muted);
+	width: 62px;
+	flex: 0 0 auto;
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-rank-value {
+	color: var(--text-normal);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-rank-time {
+	margin-left: auto;
+	font-size: 11px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.hr-rank-best {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	align-items: center;
+	padding-top: 8px;
+}
+
+.hr-rank-pill {
+	font-size: 11px;
+	padding: 4px 9px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 空态 ---------- */
+
+.hr-empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	padding: 40px 20px;
+	text-align: center;
+}
+
+.hr-empty-icon {
+	width: 52px;
+	height: 52px;
+	border-radius: 50%;
+	background: var(--background-modifier-hover);
+	color: var(--text-faint);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 4px;
+}
+
+.hr-empty-icon svg {
+	width: 22px;
+	height: 22px;
+	stroke-width: 2;
+}
+
+.hr-empty-title {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+.hr-empty-sub {
+	font-size: 13px;
+	color: var(--text-faint);
+	line-height: 1.6;
+}
+
+/* ---------- 弹窗 ---------- */
+
+/* 手机上输入法弹起来会盖住下半屏。Obsidian 的弹窗高度按视口算，键盘一撑就变矮，
+   所以内容必须自己可滚 —— 配合 RecordEditModal 里"聚焦后滚到中间"那一手，
+   最后一格输入框才够得着。写在这儿的 overflow 是保险，不是主力 */
+.is-mobile .hr-modal,
+.is-mobile .hr-types,
+.is-mobile .hr-picker {
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	padding-bottom: 16px;
+}
+
+.hr-modal-title {
+	font-size: 17px;
+	font-weight: 600;
+	margin: 0 0 14px;
+}
+
+.hr-form {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.hr-field {
+	min-width: 0;
+}
+
+.hr-field-label {
+	font-size: var(--hr-fs-note);
+	font-weight: 500;
+	color: var(--text-muted);
+	margin-bottom: 5px;
+}
+
+.hr-field-row {
+	display: flex;
+	align-items: stretch;
+	gap: 6px;
+}
+
+.hr-field-row .hr-input {
+	flex: 1;
+	min-width: 0;
+}
+
+.hr-input {
+	width: 100%;
+	box-sizing: border-box;
+	/* 15 而不是 14：这一行既有手打又有按钮，字太小会显得输入框比旁边的键瘪一圈 */
+	font-size: 15px;
+	padding: 9px 11px;
+	border-radius: var(--hr-radius-input);
+	border: 1px solid var(--hr-edge);
+	background: var(--hr-well);
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.hr-input:focus {
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 3px var(--hr-tint);
+	outline: none;
+}
+
+.hr-input.is-error {
+	border-color: var(--color-red);
+	animation: hr-shake .3s ease;
+}
+
+.hr-field-error {
+	font-size: var(--hr-fs-note);
+	color: var(--color-red);
+	margin-top: 5px;
+}
+
+.hr-field-note {
+	font-size: var(--hr-fs-note);
+	color: var(--text-faint);
+	margin-top: 6px;
+	line-height: 1.5;
+}
+
+/* 补记窗里的"这一觉多长"：边填边算，反常的时长直接标红（<1.5h 或 >14h） */
+.hr-sleep-preview {
+	padding: 9px 11px;
+	border-radius: var(--hr-radius-btn);
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-size: var(--hr-fs-note);
+	line-height: 1.45;
+}
+
+.hr-sleep-preview.is-warn {
+	background: color-mix(in srgb, var(--color-red) 12%, transparent);
+	color: var(--color-red);
+}
+
+.hr-chip-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+button.hr-chip-btn {
+	appearance: none;
+	border: 1px solid transparent;
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-size: var(--hr-fs-ctl);
+	line-height: 1;
+	padding: 9px 13px;
+	border-radius: var(--hr-radius-btn);
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+button.hr-chip-btn:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+button.hr-chip-btn.is-on {
+	background: var(--hr-tint-strong);
+	border-color: var(--hr-on-edge);
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.hr-modal-btns {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	margin-top: 18px;
+}
+
+/* 日期选择弹窗 */
+
+.hr-picker {
+	max-width: 320px;
+	margin: 0 auto;
+}
+
+.hr-pick-quick {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 14px;
+}
+
+button.hr-pick-quick-btn {
+	appearance: none;
+	border: 1px solid transparent;
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-size: var(--hr-fs-ctl);
+	line-height: 1;
+	padding: 8px 12px;
+	border-radius: var(--hr-radius-btn);
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+button.hr-pick-quick-btn:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+button.hr-pick-quick-btn.is-on {
+	background: var(--hr-tint-strong);
+	border-color: var(--hr-on-edge);
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.hr-pick-nav {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8px;
+}
+
+.hr-pick-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+button.hr-pick-arrow {
+	appearance: none;
+	border: 1px solid transparent;
+	background: none;
+	color: var(--text-muted);
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.hr-pick-arrow svg {
+	width: 18px;
+	height: 18px;
+	stroke-width: 2.25;
+}
+
+button.hr-pick-arrow:hover {
+	background: var(--hr-ghost-hover);
+	color: var(--hr-fg-hover);
+}
+
+.hr-pick-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	/* 行距比列距大一点：数字是一行行的，挤在一起像一张表而不像日历 */
+	gap: 2px 4px;
+	row-gap: 6px;
+}
+
+.hr-pick-week {
+	font-size: 11px;
+	color: var(--text-faint);
+	text-align: center;
+	padding-bottom: 3px;
+}
+
+.hr-pick-cell {
+	position: relative;
+	aspect-ratio: 1 / 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	font-size: 14px;
+	color: var(--text-normal);
+	cursor: pointer;
+	font-variant-numeric: tabular-nums;
+	transition: all .2s ease;
+}
+
+/* 选中的那一格不参与 hover：特指度比 .is-on 高，不排掉的话一悬停就把强调色刷成灰，
+   而白字留着——亮色下等于那一格看不见日子 */
+.hr-pick-cell:not(.is-blank):not(.is-on):hover {
+	background: var(--hr-ghost-hover);
+}
+
+.hr-pick-cell:active {
+	transform: scale(.94);
+}
+
+.hr-pick-cell.is-blank {
+	cursor: default;
+}
+
+/* 未来的日子整格淡化，比加一条"不可点"提示省事 */
+.hr-pick-cell.is-future {
+	opacity: .32;
+	cursor: default;
+}
+
+.hr-pick-cell.is-future:active {
+	transform: none;
+}
+
+/* 今天用一颗点，选中用一枚圆：两者叠在同一格上也不打架 */
+.hr-pick-cell.is-today::after {
+	content: "";
+	position: absolute;
+	bottom: 15%;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 4px;
+	height: 4px;
+	border-radius: 50%;
+	background: var(--interactive-accent);
+}
+
+.hr-pick-cell.is-today {
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.hr-pick-cell.is-on {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.hr-pick-cell.is-on::after {
+	background: var(--text-on-accent);
+}
+
+button.hr-pick-btn {
+	appearance: none;
+	flex: 0 0 auto;
+	align-self: stretch;
+	width: 44px;
+	border: 1px solid transparent;
+	border-radius: var(--hr-radius-input);
+	/* 白底的话和左边的输入框分不出来，看着像一个空的框 */
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease;
+}
+
+button.hr-pick-btn:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+.hr-pick-btn svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2;
+}
+
+/* 时间选择弹窗：读数在上、时/分两列拨轮在中间、两枚按钮收底。
+   2026-10-20 改成拨轮——格子版他两次都说"不喜欢/丑"。 */
+.hr-time-picker {
+	max-width: 368px;
+}
+
+/* 标题行：「现在」挪到标题右边，不再是一枚吊在空白里的小胶囊 */
+.hr-pick-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.hr-pick-head .hr-modal-title {
+	margin: 0;
+}
+
+button.hr-pick-now {
+	appearance: none;
+	flex: 0 0 auto;
+	min-height: 32px;
+	padding: 0 12px;
+	border: 1px solid var(--hr-edge);
+	border-radius: var(--hr-radius-btn);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: var(--hr-fs-note);
+	font-weight: 500;
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease;
+}
+
+button.hr-pick-now:hover {
+	background: var(--hr-ghost-hover);
+	color: var(--text-normal);
+}
+
+/* 读数当主角：40px、数字字族、居中，整块只有它和"确定"是同级的重物 */
+.hr-time-hero {
+	padding: 12px 0 16px;
+	text-align: center;
+	font-family: var(--hr-num-font);
+	font-size: 40px;
+	font-weight: 600;
+	line-height: 1;
+	letter-spacing: .5px;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 时/分两列拨轮：上下滑，选中那行落在中间那条带里。两列各带一条自己的选中带，
+   像两只独立的小轮子，而不是一块跨两列的大横条 */
+.hr-time-wheels {
+	display: flex;
+	justify-content: center;
+	gap: 12px;
+	margin: 0 0 10px;
+}
+
+.hr-wheel {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 118px;
+}
+
+.hr-wheel-label {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: .14em;
+	color: var(--text-faint);
+	margin-bottom: 2px;
+}
+
+.hr-wheel-view {
+	position: relative;
+	width: 100%;
+	height: 202px;
+}
+
+/* 中间那条选中带：带子不动，数字从它下面滚过去 */
+.hr-wheel-band {
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	top: calc(50% - 21px);
+	height: 42px;
+	border-radius: 12px;
+	background: var(--hr-tint-strong);
+	pointer-events: none;
+}
+
+.hr-wheel-scrub {
+	position: relative;
+	z-index: 1;
+	height: 100%;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+	scroll-snap-type: y mandatory;
+	scrollbar-width: none;
+	/* 上下各留半格：第一项和最后一项也能滚到正中 */
+	padding: 81px 0;
+	box-sizing: border-box;
+	/* 两端淡出：轮子边缘不该被一刀切断 */
+	-webkit-mask-image: linear-gradient(to bottom, transparent, #000 20%, #000 80%, transparent);
+	mask-image: linear-gradient(to bottom, transparent, #000 20%, #000 80%, transparent);
+}
+
+.hr-wheel-scrub::-webkit-scrollbar {
+	display: none;
+}
+
+button.hr-wheel-item {
+	display: block;
+	width: 100%;
+	height: 40px;
+	flex: 0 0 40px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--text-muted);
+	font-family: var(--hr-num-font);
+	font-size: 21px;
+	font-weight: 500;
+	line-height: 40px;
+	text-align: center;
+	cursor: pointer;
+	scroll-snap-align: center;
+	font-variant-numeric: tabular-nums;
+	transition: color .15s ease;
+}
+
+button.hr-wheel-item:hover {
+	color: var(--text-normal);
+}
+
+button.hr-wheel-item.is-on {
+	color: var(--interactive-accent);
+	font-weight: 700;
+}
+
+/* 取消不该和"确定"一样重：一枚实心灰块在底下太抢眼，改成无底的文字按钮 */
+.hr-modal-btns.is-even .hr-btn-ghost {
+	background: transparent;
+	color: var(--text-muted);
+}
+
+.hr-modal-btns.is-even .hr-btn-ghost:hover {
+	background: var(--hr-ghost-hover);
+	color: var(--text-normal);
+}
+
+/* 底栏两枚等宽按钮：取消 / 确定 各占一半，拇指够得着 */
+.hr-modal-btns.is-even {
+	display: flex;
+	gap: 10px;
+	margin-top: 6px;
+}
+
+.hr-modal-btns.is-even .hr-btn {
+	flex: 1 1 0;
+	justify-content: center;
+	min-height: 44px;
+}
+
+/* 类型管理弹窗 */
+
+.hr-types {
+	max-width: 520px;
+	margin: 0 auto;
+}
+
+/* ---------- 管理类型：一行一个，点开才铺控件 ---------- */
+
+.hr-type-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 16px;
+}
+
+.hr-type-row {
+	border: 1px solid transparent;
+	box-shadow: var(--hr-shadow-card);
+	border-radius: var(--hr-radius-card);
+	background: var(--hr-surface);
+	overflow: hidden;
+}
+
+.hr-type-row.is-open {
+	border-color: color-mix(in srgb, var(--interactive-accent) 45%, var(--hr-edge));
+}
+
+.hr-type-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	cursor: pointer;
+}
+
+.hr-type-head:hover {
+	background: var(--hr-ghost-hover);
+}
+
+.hr-type-icon {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 50%;
+	background: hsl(var(--hue) 58% 48% / .22);
+	color: hsl(var(--hue) 65% 33%);
+	box-shadow: inset 0 0 0 1px hsl(var(--hue) 55% 45% / .30);
+}
+
+.hr-type-icon svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2;
+}
+
+body.theme-dark .hr-type-icon {
+	color: hsl(var(--hue) 62% 74%);
+}
+
+.hr-type-info {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.hr-type-name {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-normal);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hr-type-sub {
+	font-size: 12px;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.hr-type-caret {
+	flex: 0 0 auto;
+	display: flex;
+	color: var(--text-faint);
+}
+
+.hr-type-caret svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* 类型排序：两枚 32px 箭头，落在名字右边、展开箭头左边。
+   32 是手机上拇指点得中的下限；到头了压到 25% 不透明，一眼看出按不动 */
+.hr-type-moves {
+	flex: 0 0 auto;
+	display: flex;
+	gap: 2px;
+}
+
+button.hr-move-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--hr-radius-btn);
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+button.hr-move-btn:hover:not(:disabled) {
+	background: var(--hr-ghost-hover);
+	color: var(--text-normal);
+}
+
+button.hr-move-btn:disabled {
+	opacity: .25;
+	cursor: default;
+}
+
+.hr-move-btn svg {
+	width: 16px;
+	height: 16px;
+	stroke-width: 2.5;
+}
+
+.hr-type-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	border-top: 1px solid var(--hr-edge);
+	/* 展开区和卡面同一张（靠上面那道分隔线分开），不再自己挑一档灰：
+	   这一带的按钮静止底色吃全局那副淡墨/淡白，比卡面重一档才看得出是按钮；
+	   色点的选中环也拿 --hr-surface 当间隔色，跟这张面是同一个值才对得上 */
+	background: var(--hr-surface);
+}
+
+.hr-opt-label {
+	font-size: var(--hr-fs-note);
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+.hr-opt-note {
+	font-size: var(--hr-fs-note);
+	line-height: 1.5;
+	color: var(--text-muted);
+}
+
+/* 图标就是它本身：一排真图标比一排 lucide 英文名好懂，也不用 hover 提示 */
+.hr-icon-pick {
+	display: grid;
+	grid-template-columns: repeat(8, minmax(0, 1fr));
+	gap: 6px;
+}
+
+button.hr-icon-opt {
+	appearance: none;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 40px;
+	border: 1px solid transparent;
+	border-radius: var(--hr-radius-btn);
+	/* 底色走 --hr-fill：.hr-type-body 里它已经被换成了卡片白面，
+	   静止和 hover 因此是同一套算法，不会出现"按下去比不按还深一档" */
+	background: var(--hr-fill);
+	box-shadow: var(--hr-shadow-card);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.hr-icon-opt svg {
+	width: 17px;
+	height: 17px;
+	stroke-width: 2;
+}
+
+button.hr-icon-opt:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+button.hr-icon-opt.is-on {
+	border-color: var(--hr-on-edge);
+	background: var(--hr-tint-strong);
+	color: var(--interactive-accent);
+}
+
+.hr-hue-pick {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.hr-hue-opt {
+	appearance: none;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border-radius: 50%;
+	/* 颜色写在元素上；这里给一圈永远看得见的边，
+	   万一某个主题没把背景画出来，也不至于一排空心圈分不清谁是谁 */
+	border: 1px solid var(--hr-edge);
+	cursor: pointer;
+	transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.hr-hue-opt:hover {
+	transform: scale(1.08);
+}
+
+/* 选中环的那一圈"间隔"要跟所在面的底色一致：色点摆在 .hr-type-body（卡面）上，
+   拿卡面当间隔色才对得上；写死某一档主题变量，换主题就是一圈异色光晕 */
+.hr-hue-opt.is-on {
+	box-shadow: 0 0 0 2px var(--hr-surface), 0 0 0 4px var(--interactive-accent);
+}
+
+/* 展开区的按钮靠一圈内描边浮起来（静止底色吃全局的 --hr-fill，和卡面差一档） */
+.hr-type-body .hr-mini-btn {
+	box-shadow: var(--hr-shadow-card);
+}
+
+.hr-type-acts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+/* 删除是低频动作，压成一行文字，别和"先隐藏""问内容"抢 */
+.hr-type-acts button.hr-mini-btn.is-del {
+	margin-left: auto;
+	border-color: transparent;
+	background: none;
+	color: var(--text-faint);
+}
+
+.hr-type-acts button.hr-mini-btn.is-del:hover,
+.hr-type-acts button.hr-mini-btn.is-del.is-armed {
+	border-color: var(--color-red);
+	background: color-mix(in srgb, var(--color-red) 12%, transparent);
+	color: var(--color-red);
+}
+
+.hr-type-new {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.hr-type-newline {
+	display: flex;
+	gap: 8px;
+}
+
+.hr-type-newline .hr-row-input {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+@media (max-width: 520px) {
+	.hr-icon-pick {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+	}
+}
+
+/* ---------- 设置页 ---------- */
+
+.hr-help {
+	margin-top: 24px;
+	color: var(--text-muted);
+	font-size: 13px;
+	line-height: 1.6;
+}
+
+.hr-code {
+	background: var(--hr-surface);
+	border: 1px solid transparent;
+	box-shadow: var(--hr-shadow-card);
+	border-radius: var(--hr-radius-btn);
+	padding: 12px;
+	font-size: 12px;
+	line-height: 1.6;
+	overflow-x: auto;
+}
+
+/* ---------- 动效与可访问性 ---------- */
+
+@keyframes hr-shake {
+	25% {
+		transform: translateX(-4px);
+	}
+	75% {
+		transform: translateX(4px);
+	}
+}
+
+.hr-root :focus-visible,
+.hr-modal :focus-visible,
+.hr-types :focus-visible,
+.hr-picker :focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hr-root *,
+	.hr-modal *,
+	.hr-types *,
+	.hr-picker * {
+		transition-duration: .01ms !important;
+		animation-duration: .01ms !important;
+	}
+}
+
+/* ---------- 窄侧边栏 ----------
+ * 侧栏宽度是用户拖出来的，跟屏幕宽度无关，所以由 JS 量容器宽度加类，
+ * 不用媒体查询——闪念笔记同款做法
+ */
+
+/* 窄栏只改结构性的东西。内边距不在这里改：侧栏那条
+   .workspace-split.mod-right-split .hr-root 的特指度更高，写了也不会生效 */
+
+/* 手机上系统字体被放大时，标题和"补记"会挤到溢出，先让标题自己缩 */
+.hr-root.is-narrow .hr-text-btn {
+	flex: 0 0 auto;
+}
+
+/* 手机上三列：两列的格子宽到 165px、高到 112px，三个类型就吃掉半屏。
+   三列每格约 108px，装"一个图标 + 一个字 + 角标"刚好，六个类型两行 */
+.hr-root.is-narrow .hr-quick-grid {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hr-root.is-narrow .hr-title-week {
+	display: none;
+}
+
+/* 这一条原来把日期标签压到 12px（"窄屏怕挤爆"），园长这轮的抱怨正好相反：
+   「相比于背景那个大方块，里面的数字和左右按钮都太小」。16px＋nowrap 在 380px 宽
+   的手机上占 100px 左右，左边页签行、右边补记都还在，压不回挤爆那一档，撤。
+   同一条里的 .hr-title-week（"本周"字样）该藏的照旧藏 */
+.hr-root.is-narrow .hr-sleep-value {
+	font-size: 24px;
+}
+
+/* ---------- 手机端 ---------- */
+
+/* 底部那条切换栏原来离手机底边还有一截：根容器自己写了 28px 的下留白，
+   再叠系统安全区，看着就是"悬在半空、没适配手机高度"（园长这轮原话）。
+   收到 8px——安全区照留，多余的固定留白去掉 */
+.is-mobile .hr-root {
+	padding: 10px 12px calc(8px + env(safe-area-inset-bottom));
+}
+
+/* 手指点得着的行高：手机上每一行都要点得中（点一行就是去改/补那一晚），
+   所以把下限从 24px 抬到 28px。--hr-tl-h 那种"声明了没人读"的写法是死规则，
+   真正的行高只有下面这一处 */
+.is-mobile .hr-tl {
+	grid-template-rows: auto repeat(var(--hr-tl-rows), minmax(28px, 1fr));
+}
+
+.is-mobile .hr-tl-day,
+.is-mobile .hr-tl-tick {
+	font-size: 12px;
+}
+
+.is-mobile .hr-mx-cell {
+	padding: 6px 2px;
+	font-size: 13px;
+}
+
+.is-mobile .hr-item {
+	padding: 11px 12px;
+}
+
+.is-mobile .hr-item-text {
+	font-size: 15px;
+}
+
+.is-mobile .hr-btn {
+	min-height: 44px;
+}
+
+/* 「修改」「记录今晚入睡」嵌在时刻那一行里，跟着手机尺寸抬就会把整行撑开，
+   和左边的时刻芯片也就不等高了一行三种体重 */
+.is-mobile .hr-btn.hr-btn-inline {
+	min-height: 34px;
+}
+
+.is-mobile .hr-time-chip {
+	min-height: 34px;
+}
+
+/* 尺寸这里只管大小；常显（opacity）由下面 @media (hover:none) 那一处统一给，
+   写两遍就会出现"改了其中一遍没反应" */
+/* 一行里三个图标键（定位 / 修改 / 删除）：再宽一点就把记录文字挤没了。
+   常显：手机上这是唯一的入口，靠 @media (hover:none) 才显形太脆——
+   外接了鼠标、或者 webview 报 hover 的设备上，整排键会直接消失 */
+.is-mobile .hr-item-btn {
+	width: 34px;
+	height: 34px;
+	opacity: 1;
+}
+
+/* iOS 上输入框字号小于 16px 会触发整页自动缩放 */
+.is-mobile .hr-input,
+.is-mobile .hr-row-input {
+	font-size: 16px;
+}
+
+/* 手指点得着的尺寸：屏上所有控件同一档 40。
+   以前底部切换条单独再高一档（44），可它现在和顶上页签是同一副胶囊轨道，
+   再高一档就成了"同一件事两种体重" */
+.is-mobile .hr-tab,
+.is-mobile .hr-pick-arrow,
+.is-mobile .hr-back-today,
+.is-mobile .hr-nav-btn,
+.is-mobile .hr-chip,
+.is-mobile .hr-text-btn,
+.is-mobile .hr-chip-btn,
+.is-mobile .hr-pick-quick-btn,
+.is-mobile .hr-mini-btn,
+.is-mobile .hr-pick-btn,
+.is-mobile .hr-icon-opt {
+	min-height: 40px;
+}
+
+/* 翻页格子在手机上给成正方形 40×40：只抬高度不抬宽度会点成"竖条"，
+   箭头也显得被挤在中间（上一轮 30×40 就是这个样子） */
+.is-mobile .hr-nav-btn {
+	width: 40px;
+	height: 40px;
+}
+
+/* 底部切换栏是拇指够的那一档，单独 46：顶上那排页签在食指区、点不准也有文字可认，
+   这一条要是点偏就切错面板。"手机上控件同一档 40"这条规矩在此处留一个有原因的例外 */
+.is-mobile .hr-seg-btn {
+	min-height: 46px;
+}
+
+.is-mobile .hr-hue-opt {
+	width: 34px;
+	height: 34px;
+}
+
+/* 触屏没有 hover：靠按下的缩放给反馈，操作按钮常显 */
+@media (hover: none) {
+	/* 触屏点完会一直停在 :hover 上。以前的做法是给每个控件再补一条"把描边、
+	   文字、背景清掉"，结果顺手把快记格子、记录行本来该有的底色也清成了透明——
+	   手机上按一下就花一块。现在 hover 的取值本身就是变量，改这几个变量
+	   等于"没有 hover"，一条声明管住所有控件，也不碰卡片自己的底。 */
+	.hr-root,
+	.hr-modal,
+	.hr-types,
+	.hr-picker,
+	.hr-settings {
+		--hr-fill-hover: var(--hr-fill);
+		--hr-fg-hover: var(--text-muted);
+		--hr-ghost-hover: transparent;
+	}
+
+	/* --hr-fill-hover 是在这五个容器上算出来的，容器内部的局部覆盖传不进去：
+	   .hr-type-body 把静止底色换成了卡片白面，那一圈控件得就地再翻一次，
+	   否则手机上展开的类型行里按过的按钮会比没按过的深一档 */
+	.hr-type-body {
+		--hr-fill-hover: var(--hr-fill);
+	}
+
+	.hr-item-btn {
+		opacity: 1;
+	}
+
+	/* 阴影是 hover 加的唯一还在起作用的反馈，触屏上同样清回静止值 */
+	.hr-quick:hover,
+	.hr-item:hover,
+	.hr-card:hover {
+		box-shadow: var(--hr-shadow-card);
+	}
+
+	.hr-item:hover {
+		border-color: transparent;
+	}
+
+	/* 放大同理：点过的色点会一直比邻居大 8% */
+	.hr-hue-opt:hover {
+		transform: none;
+	}
+
+	/* 没有 hover 就用按下的缩放给反馈 */
+	.hr-quick:active,
+	.hr-chip:active,
+	.hr-pick-cell:active,
+	.hr-mini-btn:active,
+	.hr-chip-btn:active {
+		transform: scale(.96);
+	}
+}
+
+/* 窄栏里标题和标签页抢同一行会被挤成"10…"，让它单独占一行 */
+.hr-root.is-narrow .hr-header-meta {
+	flex-basis: 100%;
+	order: 3;
+}
+
+/* ---------- 侧边栏与手机端布局 ----------
+ * 侧栏宽度是用户拖出来的，跟屏幕宽度无关：先按 Obsidian 自己的分栏类收紧，
+ * 再用视口断点处理手机全屏抽屉（月历任务同款两层做法）
+ */
+
+.workspace-split.mod-right-split .hr-root,
+.workspace-split.mod-left-split .hr-root {
+	--hr-pad: 8px;
+	padding: 8px 8px 20px;
+	gap: 5px;
+}
+
+.workspace-split.mod-right-split .hr-card,
+.workspace-split.mod-left-split .hr-card {
+	padding: 10px 11px;
+}
+
+@media (max-width: 600px) {
+	.hr-root {
+		padding: 10px 10px calc(8px + env(safe-area-inset-bottom));
+	}
+
+	/* 手机上卡片和格子的"重量"要压住：一屏装不下三样东西的时候，
+	   先牺牲卡片内边距和格子高度，不牺牲字号 */
+	.hr-quick {
+		min-height: 64px;
+	}
+
+	.hr-card {
+		padding: 10px 12px;
+		gap: 8px;
+	}
+
+	.hr-item-text,
+	.hr-section-title {
+		font-size: 14px;
+	}
+
+	.hr-item-time,
+	.hr-tl-val,
+	.hr-mx-cell {
+		font-size: 13px;
+	}
+
+	/* 手机上系统字体放大后，两列统计比 auto-fit 留下的孤儿格整齐。
+	   留 4px 而不是 3px：正好等于容器宽度的 calc 会被亚像素挤成一行一个 */
+	.hr-stats .hr-stat {
+		flex-basis: calc(50% - 4px);
+	}
+}
+
+/* 侧栏宽度是拖出来的，跟视口无关，所以按 is-narrow 反着来而不是按断点 */
+.hr-root:not(.is-narrow) .hr-quick-grid {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* ---------- 设置页 ----------
+ * 字号一律用 Obsidian 的 UI 字体变量，手机上"设置→字体大小"才会真的生效；
+ * 行结构照月历任务的类别行：色点 + 名称/说明 + 控件，自己画而不是套 Setting
+ */
+
+.hr-settings .hr-setting-note {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+	line-height: 1.5;
+	margin: -4px 0 10px;
+}
+
+.hr-row-list {
+	margin: 0 0 18px;
+	padding: 0 0 4px;
+	border-bottom: 1px solid var(--hr-edge);
+}
+
+.hr-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 8px;
+	margin: 0 -8px;
+	border-radius: 8px;
+}
+
+/* 扫描那一行：和上面的文件夹列表之间要有个分隔，不然像同一组里的最后一项 */
+.hr-row.hr-row-action {
+	margin-top: 6px;
+	padding-top: 10px;
+	border-top: 1px solid var(--hr-edge);
+}
+
+.hr-row.is-current {
+	background: var(--hr-tint);
+}
+
+
+.hr-row-main {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.hr-row-name {
+	font-size: var(--font-ui-medium);
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.hr-row-sub {
+	font-size: var(--font-ui-small);
+	color: var(--text-faint);
+	line-height: 1.4;
+}
+
+.hr-row-tag {
+	flex: 0 0 auto;
+	font-size: var(--font-ui-smaller);
+	padding: 3px 9px;
+	border-radius: 999px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+button.hr-mini-btn {
+	appearance: none;
+	flex: 0 0 auto;
+	border: 1px solid transparent;
+	background: var(--hr-fill);
+	color: var(--text-muted);
+	font-size: var(--hr-fs-ctl);
+	line-height: 1;
+	padding: 8px 12px;
+	border-radius: var(--hr-radius-btn);
+	cursor: pointer;
+	transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+
+button.hr-mini-btn:hover {
+	background: var(--hr-fill-hover);
+	color: var(--hr-fg-hover);
+}
+
+button.hr-mini-btn.is-on {
+	background: var(--hr-tint-strong);
+	border-color: var(--hr-on-edge);
+	color: var(--interactive-accent);
+	font-weight: 600;
+}
+
+button.hr-mini-btn.is-primary {
+	background: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.hr-mini-btn.is-del:hover {
+	border-color: var(--color-red);
+	color: var(--color-red);
+}
+
+button.hr-mini-btn.is-armed {
+	background: var(--color-red);
+	border-color: var(--color-red);
+	color: var(--text-on-accent);
+}
+
+
+.hr-row-input {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 15px;
+	padding: 8px 10px;
+	border-radius: var(--hr-radius-btn);
+	border: 1px solid var(--hr-edge);
+	background: var(--hr-well);
+	color: var(--text-normal);
+}
+
+.hr-row-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+}
+
+/* 触屏：控件字号整体抬一档（手指点得着，但不至于比说明文字大两倍）。
+   输入框的 16px 在下面手机端那一节单独写——iOS 上小于这个数，聚焦会放大整页 */
+.is-mobile .hr-root,
+.is-mobile .hr-modal,
+.is-mobile .hr-types,
+.is-mobile .hr-picker,
+.is-mobile .hr-settings {
+	--hr-fs-ctl: 14px;
+	--hr-fs-note: 13px;
+}

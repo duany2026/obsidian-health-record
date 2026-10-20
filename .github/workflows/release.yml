@@ -1,0 +1,54 @@
+name: Release
+
+# 推送 v* 标签时自动打包插件并创建 Release（照 obsidian-monthly-tasks 那条发布链写的）
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 打包插件
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          rm -rf dist
+          mkdir -p dist/health-record
+          cp main.js manifest.json styles.css versions.json README.md LICENSE dist/health-record/
+          cd dist
+          zip -r "health-record-${VER}.zip" health-record
+          ls -l
+
+      - name: 写发行说明
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VER="${TAG#v}"
+          {
+            printf '健康记录 %s\n\n' "$VER"
+            printf '下载 `health-record-%s.zip`，解压后把整个 `health-record` 文件夹放进你的笔记库 `.obsidian/plugins/` 里，重启 Obsidian 后在第三方插件中启用。\n\n' "$VER"
+            printf '改动逐条写在 README 的「版本记录」一节。\n'
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: 创建 / 更新 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/health-record-*.zip --clobber
+            gh release edit "$TAG" --title "健康记录 ${TAG}" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$TAG" dist/health-record-*.zip --title "健康记录 ${TAG}" --notes-file RELEASE_NOTES.md
+          fi
