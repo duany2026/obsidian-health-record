@@ -36,7 +36,7 @@ jobs:
           {
             printf '健康记录 %s\n\n' "$VER"
             printf '下载 `health-record-%s.zip`，解压后把整个 `health-record` 文件夹放进你的笔记库 `.obsidian/plugins/` 里，重启 Obsidian 后在第三方插件中启用。\n\n' "$VER"
-            printf '改动逐条写在 README 的「版本记录」一节。\n'
+            printf '版本变化见本页 Releases；逐轮开发日志留在维护者本机，不随仓库发布。\n'
           } > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
