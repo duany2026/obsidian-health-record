@@ -1094,6 +1094,42 @@ function average(values) {
   return Math.round(nums.reduce((s, v) => s + v, 0) / nums.length);
 }
 
+/** 0.8.0：昨日"截至此刻"的记录数——昨今对比（口径 A）的核心：
+ *  今天还没过完，与昨天全天比必然"落后"，只有同进度对比才公平、才有信息量 */
+function sameTimeCount(records, nowMinutes) {
+  let n = 0;
+  for (const r of records || []) {
+    const m = timeToMinutes(r.time);
+    if (m !== null && m <= nowMinutes) n++;
+  }
+  return n;
+}
+
+/** 0.8.0：环比用的上一窗口。
+ *  rolling：两个窗口都以今天收尾，上一窗口就是再往前 N 天，天然同口径；
+ *  日历周：截上一周的"相同进度段"（上周一 ~ 与今天同星期几），不与完整周比；
+ *  日历月：上月 1 号 ~ 上月同日号（该月不够长时取到月末）。 */
+function previousViewRange(range, rolling, tab) {
+  const start = dateFromStr(range.start);
+  const end = dateFromStr(range.end);
+  const today = new Date();
+  const last = end.getTime() < today.getTime() ? end : today;
+  if (rolling) {
+    const n = tab === "week" ? 7 : 30;
+    return { start: formatDate(addDays(start, -n)), end: formatDate(addDays(start, -1)) };
+  }
+  if (tab === "week") {
+    const progress = Math.round((last.getTime() - start.getTime()) / 864e5) + 1;
+    const ps = addDays(start, -7);
+    return { start: formatDate(ps), end: formatDate(addDays(ps, progress - 1)) };
+  }
+  const dayNum = last.getDate();
+  let py = start.getFullYear(), pm = start.getMonth() - 1;
+  if (pm < 0) { pm = 11; py -= 1; }
+  const prevLen = new Date(py, pm + 1, 0).getDate();
+  return { start: formatDate(new Date(py, pm, 1)), end: formatDate(new Date(py, pm, Math.min(dayNum, prevLen))) };
+}
+
 // ==================== 趋势图（次数折线 / 睡眠区间条）====================
 
 /**
@@ -1387,6 +1423,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     await this.render();
   }
 
+
   async onClose() {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -1602,6 +1639,13 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const range = this.rangeForTab();
       const records = await this.plugin.manager.loadRange(range.start, range.end);
       const byDay = groupByDay(records);
+      // 0.8.0：周/月页另取上一窗口，供统计条做环比（rolling=前 N 天；日历=上周/上月同进度段）
+      let prevDays = null;
+      if (this.tab !== "today") {
+        const pr = previousViewRange(range, this.rolling(), this.tab);
+        const prevByDay = groupByDay(await this.plugin.manager.loadRange(pr.start, pr.end));
+        prevDays = this.expandDaysList(pr.start, pr.end, prevByDay);
+      }
       this.renderHeader(range);
       const label = this.buildNav();
       if (label) {
@@ -1614,8 +1658,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       // 相邻上下文：本周可能跨月且"今晚的睡眠"锚在昨天，今日页要看前一晚
       const context = this.tab === "today" ? await this.plugin.manager.loadRange(formatDate(addDays(dateFromStr(range.start), -3)), range.end) : [];
       if (this.tab === "today") await this.renderToday(byDay, groupByDay(context));
-      else if (this.tab === "week") this.renderWeek(byDay, range);
-      else this.renderMonth(byDay, range);
+      else if (this.tab === "week") this.renderWeek(byDay, range, prevDays);
+      else this.renderMonth(byDay, range, prevDays);
       const nextKey = `${this.tab}|${this.currentPanel()}|${this.date}|${formatDate(this.anchor)}`;
       this._renderKey = nextKey;
       if (prevKey === nextKey && prevScroll > 0) {
@@ -1674,10 +1718,25 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const today = formatDate(new Date());
     if (this.tab === "today") {
       const d = dateFromStr(this.date);
+      // 0.8.0：日期两侧的箭头翻前一天/后一天。不用左右滑动手势——那和 Obsidian
+      // 移动端的边缘滑动返回是同一个动作，两边会互相抢
+      const mkDayNav = (icon, aria, delta) => {
+        const btn = this.headerMeta.createEl("button", { cls: "hr-nav-btn", attr: { "aria-label": aria } });
+        paintIcon(btn, icon, "chevron");
+        btn.addEventListener("click", () => {
+          this.date = formatDate(addDays(d, delta));
+          void this.render();
+        });
+        return btn;
+      };
+      mkDayNav("chevron-left", "前一天", -1);
       const title = this.headerMeta.createSpan({ cls: "hr-title" });
       title.createSpan({ text: formatDateLabel(this.date) });
       // 窄栏里"周几"最先该被挤掉，日期本身比它有用
       title.createSpan({ cls: "hr-title-week", text: ` 周${WEEKDAY_SHORT[(d.getDay() + 6) % 7]}` });
+      const next = mkDayNav("chevron-right", "后一天", 1);
+      // 未来的日子不列：翻到今天就把"后一天"禁掉，而不是让点了没反应
+      if (this.date >= today) next.disabled = true;
       if (this.date !== today) {
         const back = this.headerMeta.createEl("button", { cls: "hr-back-today", text: "返回今天" });
         back.addEventListener("click", () => {
@@ -1709,6 +1768,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     // 看着像"只有十条记录"，其实是后面看不见了
     const host = this.bodyEl.createDiv({ cls: "hr-panel" });
     if (this.currentPanel() === "list") {
+      // 0.8.0：昨今对比总览条放在明细页顶部——复盘信息跟明细同页，录入页保持原来的睡眠大卡
+      this.renderTodayOverview(day, contextByDay, host);
       this.renderDayList(day, host);
       return;
     }
@@ -1717,26 +1778,74 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     if (this.date === formatDate(new Date())) this.renderQuickGrid(day, host);
   }
 
-  /**
-   * 这一格该看哪一晚：优先当天自己记的；没有就往前 3 天找。
-   * 记录锚在入睡那晚，所以早上打开时"昨晚那觉"挂在昨天——睡眠卡和睡眠条必须看同一个答案，
-   * 否则会出现卡片显示 7 小时、条上却没有那一晚。
-   */
-  resolveNight(day, contextByDay) {
-    const latest = (list) => (list.length ? list.slice().sort((a, b) => (a.onset < b.onset ? -1 : 1)).pop() : null);
-    const own = latest(day.sleeps);
-    if (own) return { record: own, label: `${formatDateLabel(day.date)} 那一晚`, borrowed: false, pending: !own.wake };
-    // 今天这一页只往前借一晚：再往前借就会把"前天那一觉"顶在早上第一屏，
-    // 而昨晚还没记这件事反而没地方点（他 10-21 早上要记的正是昨晚）。
-    // 翻旧日子的页面仍借三天——那是回看，不是录入
-    const backLimit = this.date === formatDate(new Date()) ? 1 : 3;
-    for (let back = 1; back <= backLimit; back++) {
-      const key = formatDate(addDays(dateFromStr(day.date), -back));
-      const prev = contextByDay.get(key);
-      const sleep = prev ? primarySleep(prev) : null;
-      if (sleep) return { record: sleep, label: `${formatDateLabel(key)} 夜里`, borrowed: true, pending: !sleep.wake };
+  /** 0.8.0：今日「明细」页顶部的总览条。看今天=与昨日"截至此刻"比（口径 A，同进度才公平）；
+   *  翻历史日=与前一日全天比。差值用主题强调色做重音，箭头只报方向、不表褒贬；
+   *  睡眠那一枚例外——跟时长共用睡眠色相（计数归紫、睡眠归蓝紫，颜色即语义）。 */
+  renderTodayOverview(day, contextByDay, host) {
+    const strip = host.createDiv({ cls: "hr-today-strip" });
+    const isToday = day.date === formatDate(new Date());
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    const prevDay = contextByDay.get(formatDate(addDays(dateFromStr(day.date), -1))) || null;
+    const mk = (label, value, deltaText, opts) => {
+      const o = opts || {};
+      const item = strip.createDiv({ cls: "hr-today-item" });
+      item.createDiv({ cls: "hr-today-label", text: label });
+      const line = item.createDiv({ cls: "hr-today-line" });
+      line.createSpan({ cls: "hr-today-value", text: String(value) });
+      if (o.noBase) {
+        line.createSpan({ cls: "hr-today-delta is-none", text: o.noBaseText || "昨日未记" });
+      } else if (deltaText) {
+        line.createSpan({ cls: "hr-today-delta" + (o.sleep ? " is-sleep" : ""), text: deltaText });
+      }
+      item.setAttribute("title", o.title || (o.noBase ? "昨天没有记录，无从对比" : "与昨日" + (isToday ? "同时刻" : "全天") + "相比"));
+    };
+    // 睡眠 chip：跟记录页大卡同一晚（resolveNight），和前一晚记全的觉比；
+    // 没记全就不占格（待记起床的状态大卡已经说了，这里不重复）。锚定按入睡时刻值匹配，
+    // 不按对象引用——byDay 与 contextByDay 是两份解析结果，引用对不上
+    const night = this.resolveNight(day, contextByDay);
+    const nightMin = night && night.record.wake ? sleepDuration(night.record.onset, night.record.wake) : null;
+    if (nightMin !== null) {
+      const min = nightMin;
+      let anchor = null;
+      for (const [k, d] of contextByDay) {
+        if (k > day.date) continue;
+        if (d && d.sleeps && d.sleeps.some((r) => r.onset === night.record.onset) && (!anchor || k > anchor)) anchor = k;
+      }
+      const prevNightObj = anchor ? contextByDay.get(formatDate(addDays(dateFromStr(anchor), -1))) : null;
+      const prevSleep = prevNightObj ? primarySleep(prevNightObj) : null;
+      const prevMin = prevSleep && prevSleep.wake ? sleepDuration(prevSleep.onset, prevSleep.wake) : null;
+      const d = prevMin === null || min === null ? null : min - prevMin;
+      mk("睡眠", formatDuration(min), d ? (d > 0 ? "↑" : "↓") + formatDuration(Math.abs(d)) : null,
+        { sleep: true, noBase: prevMin === null, noBaseText: "前晚未记", title: "与前一晚相比" });
     }
-    return null;
+    for (const type of this.plugin.visibleTypes()) {
+      const n = countOf(day, type);
+      const prevList = prevDay ? (prevDay.byType.get(type) || []) : null;
+      if (prevList === null) { mk(type, n, null, { noBase: true }); continue; }
+      const p = isToday ? sameTimeCount(prevList, nowMin) : prevList.length;
+      const d = n - p;
+      mk(type, n, d ? (d > 0 ? "↑" : "↓") + Math.abs(d) : null, {});
+    }
+    let prevTotal = null;
+    if (prevDay) {
+      prevTotal = isToday
+        ? Array.from(prevDay.byType.values()).reduce((s, l) => s + sameTimeCount(l, nowMin), 0)
+        : prevDay.total;
+    }
+    const dTotal = prevTotal === null ? null : day.total - prevTotal;
+    mk("记录", day.total, dTotal ? (dTotal > 0 ? "↑" : "↓") + Math.abs(dTotal) : null, { noBase: prevTotal === null });
+    // 手机横滑条：右边还有格子被挡住、或已经滚过去了，边缘渐隐一下才看得出来
+    const updFade = () => {
+      const over = strip.scrollWidth - strip.clientWidth;
+      strip.classList.toggle("is-more-right", over > 1 && strip.scrollLeft < over - 1);
+      strip.classList.toggle("is-more-left", strip.scrollLeft > 1);
+    };
+    strip.addEventListener("scroll", updFade, { passive: true });
+    requestAnimationFrame(updFade);
+    // 刚开始记还没攒出可比的昨天：整排灰字看着像坏了，给一行实话
+    if (isToday && day.total === 0 && (!prevDay || (prevDay.total === 0 && prevDay.sleeps.length === 0))) {
+      host.createDiv({ cls: "hr-today-hint", text: "从今天记起，明天这里就能和今天比" });
+    }
   }
 
   /**
@@ -1824,6 +1933,28 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     }
   }
 
+  /**
+   * 这一格该看哪一晚：优先当天自己记的；没有就往前 3 天找。
+   * 记录锚在入睡那晚，所以早上打开时"昨晚那觉"挂在昨天——睡眠卡和睡眠条必须看同一个答案，
+   * 否则会出现卡片显示 7 小时、条上却没有那一晚。
+   */
+  resolveNight(day, contextByDay) {
+    const latest = (list) => (list.length ? list.slice().sort((a, b) => (a.onset < b.onset ? -1 : 1)).pop() : null);
+    const own = latest(day.sleeps);
+    if (own) return { record: own, label: `${formatDateLabel(day.date)} 那一晚`, borrowed: false, pending: !own.wake };
+    // 今天这一页只往前借一晚：再往前借就会把"前天那一觉"顶在早上第一屏，
+    // 而昨晚还没记这件事反而没地方点（他 10-21 早上要记的正是昨晚）。
+    // 翻旧日子的页面仍借三天——那是回看，不是录入
+    const backLimit = this.date === formatDate(new Date()) ? 1 : 3;
+    for (let back = 1; back <= backLimit; back++) {
+      const key = formatDate(addDays(dateFromStr(day.date), -back));
+      const prev = contextByDay.get(key);
+      const sleep = prev ? primarySleep(prev) : null;
+      if (sleep) return { record: sleep, label: `${formatDateLabel(key)} 夜里`, borrowed: true, pending: !sleep.wake };
+    }
+    return null;
+  }
+
   addButton(parent, icon, label, handler, cls) {
     const btn = parent.createEl("button", { cls: "hr-btn " + (cls || "hr-btn-ghost") });
     const iconEl = btn.createSpan({ cls: "hr-btn-icon" });
@@ -1841,7 +1972,14 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const section = (host || this.bodyEl).createDiv({ cls: "hr-section" });
     const head = section.createDiv({ cls: "hr-section-head" });
     head.createSpan({ cls: "hr-section-title", text: "快速记录" });
-    const manage = head.createEl("button", { cls: "hr-quiet-btn", text: "管理类型" });
+    const acts = head.createDiv({ cls: "hr-section-acts" });
+    // 撤销跟进：撤销栈只管本会话刚记的那一条，所以只在真有一笔可撤时出现；
+    // 手机上命令面板太深，手滑多点的第一时间就该在手边
+    if (this.plugin._lastWrite) {
+      const undo = acts.createEl("button", { cls: "hr-quiet-btn", text: "撤销" });
+      undo.addEventListener("click", () => void this.plugin.undoLast());
+    }
+    const manage = acts.createEl("button", { cls: "hr-quiet-btn", text: "管理类型" });
     manage.addEventListener("click", () => new TypeManagerModal(this.app, this.plugin).open());
 
     const grid = section.createDiv({ cls: "hr-quick-grid" });
@@ -1853,12 +1991,21 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       paintIcon(iconEl, meta.icon, "circle");
       btn.createSpan({ cls: "hr-quick-label", text: meta.name });
       const count = countOf(day, type);
-      // 深浅表意，不写数字（这轮选的）：格子铺一层自己那枚色相，记一次深一档、
-      // 四档封顶。上一版一档只加 5%，他说"颜色变化其实并不明显"——
-      // 大多类型一天也就点两三次，档差太小等于没有。精确次数仍在 aria-label／长按提示里
+      // 0.8.0：色深之外补回数字角标——"记了几次"一眼可读（总览条之外的第二落点）
+      if (count) {
+        const badge = btn.createSpan({ cls: "hr-quick-count", text: String(count) });
+        badge.setAttribute("aria-hidden", "true");
+      }
       btn.style.setProperty("--hr-quick-level", String(Math.min(count, 4)));
       if (count) btn.addClass("is-done");
-      btn.addEventListener("click", () => this.plugin.quickRecord(type));
+      btn.addEventListener("click", async () => {
+        await this.plugin.quickRecord(type);
+        // 0.8.0：记完给一次轻脉冲；「问内容」型会打开弹窗，不闪
+        if (!meta.ask) {
+          btn.addClass("hr-quick-flash");
+          setTimeout(() => btn.removeClass("hr-quick-flash"), 420);
+        }
+      });
       btn.setAttribute("aria-label", `记录${meta.name}（今天已 ${count} 次）`);
       btn.title = `${meta.name}：今天 ${count} 次`;
     }
@@ -1898,7 +2045,22 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     rows.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
 
     const list = section.createDiv({ cls: "hr-list" });
+    // 0.8.0：按时段分组（凌晨/上午/下午/晚上）——长长一根列表里好定位"晚上那次"
+    const periodOf = (t) => {
+      const m = timeToMinutes(t);
+      if (m === null) return null;
+      if (m < 300) return "凌晨";
+      if (m < 720) return "上午";
+      if (m < 1080) return "下午";
+      return "晚上";
+    };
+    let lastPeriod = null;
     for (const row of rows) {
+      const p = periodOf(row.time);
+      if (p && p !== lastPeriod) {
+        lastPeriod = p;
+        list.createDiv({ cls: "hr-list-period", text: p });
+      }
       const meta = typeMeta(row.rec.type) || { icon: "circle", hue: 210 };
       const item = list.createDiv({ cls: "hr-item" + (row.unknown ? " is-unknown" : "") });
       item.style.setProperty("--hue", String(meta.hue));
@@ -1955,18 +2117,22 @@ var HealthRecordView = class extends import_obsidian.ItemView {
    * 看着像"断了"，分母也跟着虚（16/31 其实是 16/17）。
    */
   daysInRange(range, byDay) {
-    const start = dateFromStr(range.start);
-    const endMs = Math.min(dateFromStr(range.end).getTime(), dateFromStr(formatDate(new Date())).getTime());
-    const days = [];
-    for (let d = new Date(start), i = 0; d.getTime() <= endMs; i++) {
-      const key = formatDate(d);
-      days.push({ date: key, day: byDay.get(key) || null });
-      d = addDays(d, 1);
-    }
-    return days;
+    const today = formatDate(new Date());
+    const endStr = range.end < today ? range.end : today;
+    return this.expandDaysList(range.start, endStr, byDay);
   }
 
-  renderRangeStats(days) {
+  /** 0.8.0：按日期串展开逐日列表（daysInRange 与环比上一窗口共用） */
+  expandDaysList(startStr, endStr, byDay) {
+    const out = [];
+    for (let d = dateFromStr(startStr), e = dateFromStr(endStr); d.getTime() <= e.getTime(); d = addDays(d, 1)) {
+      const key = formatDate(d);
+      out.push({ date: key, day: byDay ? (byDay.get(key) || null) : null });
+    }
+    return out;
+  }
+
+  renderRangeStats(days, prevDays) {
     const durations = [];
     let sleepDays = 0;
     let recordTotal = 0;
@@ -1983,10 +2149,46 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       if (n) recordedDays++;
       recordTotal += n;
     }
-    this.statCell(this.statsEl, "平均睡眠", durations.length ? formatDuration(average(durations)) : "—");
-    this.statCell(this.statsEl, "记了睡眠", `${sleepDays} / ${days.length}`);
-    this.statCell(this.statsEl, "记录条数", `${recordTotal} 条`);
+    // 0.8.0：环比上一窗口（小字缀在数值下）。强调色只做重音，箭头报方向、不表褒贬；
+    // 上一窗口完全没数据时不显示，不拿空基数算差值
+    const prev = prevDays && prevDays.length ? this.collectRangeMetrics(prevDays) : null;
+    const sleepAvg = durations.length ? average(durations) : null;
+    const dSleep = prev && prev.sleepAvg !== null && sleepAvg !== null ? sleepAvg - prev.sleepAvg : null;
+    const dTotal = prev && prev.hasAny ? recordTotal - prev.recordTotal : null;
+    const dDays = prev && prev.hasAny ? recordedDays - prev.recordedDays : null;
+    this.statCell(this.statsEl, "平均睡眠", durations.length ? formatDuration(sleepAvg) : "—", this.formatStatDelta(dSleep, "dur"), "is-sleep");
+    this.statCell(this.statsEl, "记了睡眠", `${sleepDays} / ${days.length}`, this.formatStatDelta(dDays, "day"));
+    this.statCell(this.statsEl, "记录条数", `${recordTotal} 条`, this.formatStatDelta(dTotal, "num"));
     this.statCell(this.statsEl, "有记录", `${recordedDays} / ${days.length} 天`);
+    // 0.8.0：整窗没数据的一行实话，免得四个"—"加空图像坏了
+    if (!recordTotal) this.statsEl.createDiv({ cls: "hr-stat-hint", text: "这段时间还没有记录，记几天后这里就有图可看了" });
+  }
+
+  collectRangeMetrics(days) {
+    const durations = [];
+    let recordTotal = 0;
+    let recordedDays = 0;
+    for (const entry of days) {
+      const day = entry.day;
+      if (!day) continue;
+      const sleep = primarySleep(day);
+      const min = sleep ? sleepDuration(sleep.onset, sleep.wake) : null;
+      if (min !== null) durations.push(min);
+      const n = day.total + day.sleeps.length;
+      if (n) recordedDays++;
+      recordTotal += n;
+    }
+    return { sleepAvg: durations.length ? average(durations) : null, recordTotal, recordedDays, hasAny: recordTotal > 0 || recordedDays > 0 };
+  }
+
+  /** 环比小字：差 0 或无基数返回 null（不渲染） */
+  formatStatDelta(v, kind) {
+    if (v === null || v === undefined || v === 0) return null;
+    const sign = v > 0 ? "↑ " : "↓ ";
+    const abs = Math.abs(v);
+    if (kind === "dur") return sign + formatDuration(abs);
+    if (kind === "day") return sign + abs + " 天";
+    return sign + abs + " 条";
   }
 
   panelHead(host, title, note) {
@@ -2069,14 +2271,14 @@ var HealthRecordView = class extends import_obsidian.ItemView {
 
   // ---------- 本周 ----------
 
-  renderWeek(byDay, range) {
+  renderWeek(byDay, range, prevDays) {
     const days = this.daysInRange(range, byDay);
     if (!days.length) {
       this.segEl.addClass("hr-hidden");
       this.bodyEl.createDiv({ cls: "hr-card hr-page-empty", text: "这一周还没到，先看本周或往回翻" });
       return;
     }
-    this.renderRangeStats(days);
+    this.renderRangeStats(days, prevDays);
     const panel = this.currentPanel();
     if (panel === "sleep") this.renderSleepPanel(days);
     else if (panel === "count") this.renderCountPanel(days);
@@ -2110,6 +2312,14 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       cell.setAttribute("title", type);
     }
 
+    // 0.8.0：热力底——格子底色按"该列最大值"分档加深，扫一眼看出周中/周末的松紧；
+    // 零格保持透明（"没记"不染成"记了但少"）
+    const colMax = new Map();
+    for (const type of types) {
+      let mx = 0;
+      for (const entry of days) mx = Math.max(mx, countOf(entry.day, type));
+      colMax.set(type, mx);
+    }
     for (const entry of days) {
       const d = dateFromStr(entry.date);
       const isToday = entry.date === formatDate(new Date());
@@ -2118,7 +2328,13 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       for (const type of types) {
         const n = countOf(entry.day, type);
         const cell = row.createSpan({ cls: "hr-mx-cell" + (n ? "" : " is-zero"), text: n ? String(n) : "·" });
-        cell.style.setProperty("--hue", String((typeMeta(type) || { hue: 210 }).hue));
+        const hue = (typeMeta(type) || { hue: 210 }).hue;
+        cell.style.setProperty("--hue", String(hue));
+        if (n) {
+          const mx = colMax.get(type) || n;
+          const alpha = (0.12 + 0.34 * (n / (mx || 1))).toFixed(3);
+          cell.style.background = `hsl(${hue} 55% 50% / ${alpha})`;
+        }
       }
     }
   }
@@ -2165,14 +2381,14 @@ var HealthRecordView = class extends import_obsidian.ItemView {
 
   // ---------- 本月 ----------
 
-  renderMonth(byDay, range) {
+  renderMonth(byDay, range, prevDays) {
     const days = this.daysInRange(range, byDay);
     if (!days.length) {
       this.segEl.addClass("hr-hidden");
       this.bodyEl.createDiv({ cls: "hr-card hr-page-empty", text: "这个月还没到，往回翻一个月" });
       return;
     }
-    this.renderRangeStats(days);
+    this.renderRangeStats(days, prevDays);
     const panel = this.currentPanel();
     if (panel === "sleep") this.renderSleepPanel(days);
     else if (panel === "count") this.renderCountPanel(days);
@@ -2213,9 +2429,10 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     for (const item of best) bestRow.createSpan({ cls: "hr-rank-pill", text: `${formatDateLabel(item.date)} ${formatDuration(item.min)}` });
   }
 
-  statCell(parent, label, value) {
+  statCell(parent, label, value, delta, deltaCls) {
     const cell = parent.createDiv({ cls: "hr-stat" });
     cell.createDiv({ cls: "hr-stat-value", text: value });
+    if (delta) cell.createDiv({ cls: "hr-stat-delta" + (deltaCls ? " " + deltaCls : ""), text: delta });
     cell.createDiv({ cls: "hr-stat-label", text: label });
   }
 

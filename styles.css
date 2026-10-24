@@ -184,7 +184,7 @@ body.theme-dark .hr-settings {
 
 /* ---------- 头部 ---------- */
 
-/* 本视图整页不滚，view-content 也就不需要滚 */
+/* 本视图整页不滚（周/月页），view-content 也就不需要滚 */
 .workspace-leaf-content[data-type="health-record-view"] .view-content {
 	overflow: hidden;
 	background: var(--hr-canvas);
@@ -2816,4 +2816,173 @@ button.hr-mini-btn.is-armed {
 .is-mobile .hr-settings {
 	--hr-fs-ctl: 14px;
 	--hr-fs-note: 13px;
+}
+
+/* ============================================================
+   0.8.0 新增
+   - 今日「明细」页顶部的总览条（昨今对比，差值用强调色做重音）
+   - 快记数字角标与成功脉冲
+   - 统计格子的环比小字
+   ============================================================ */
+
+/* ---------- 今日总览条：桌面换行、手机一行横滑 ---------- */
+.hr-today-strip {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+.hr-today-item {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 12px;
+	border-radius: var(--hr-radius-card);
+	background: var(--hr-surface);
+	box-shadow: var(--hr-shadow-card);
+	box-sizing: border-box;
+	min-width: 0;
+}
+.hr-today-label {
+	font-size: var(--hr-fs-note);
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+.hr-today-line {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+}
+.hr-today-value {
+	font-family: var(--hr-num-font);
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.2;
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+/* 重音时刻：差值用主题强调色（只做重音，方向由箭头表达，不表褒贬） */
+.hr-today-delta {
+	font-family: var(--hr-num-font);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--interactive-accent);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.hr-today-delta.is-none {
+	color: var(--text-faint);
+	font-weight: 400;
+	font-size: 11px;
+}
+.is-mobile .hr-today-strip {
+	flex-wrap: nowrap;
+	overflow-x: auto;
+	scrollbar-width: none;
+	padding-bottom: 1px;
+}
+.is-mobile .hr-today-strip::-webkit-scrollbar { display: none; }
+.is-mobile .hr-today-item { flex: 0 0 auto; }
+
+/* ---------- 快记格子：数字角标（色深之外的精确读数） ---------- */
+.hr-quick-count {
+	position: absolute;
+	top: 6px;
+	right: 8px;
+	z-index: 1;
+	font-family: var(--hr-num-font);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+}
+.hr-quick.is-done .hr-quick-count { color: var(--text-normal); }
+
+/* 快记成功的一次轻脉冲 */
+@keyframes hr-quick-pulse {
+	0% { transform: scale(1); }
+	35% { transform: scale(0.92); }
+	100% { transform: scale(1); }
+}
+.hr-quick.hr-quick-flash { animation: hr-quick-pulse .4s ease; }
+
+/* ---------- 统计格子的环比小字 ---------- */
+.hr-stat-delta {
+	margin-top: 1px;
+	font-family: var(--hr-num-font);
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--interactive-accent);
+	font-variant-numeric: tabular-nums;
+}
+
+/* 今日页日期箭头：沿用翻页箭头的样式，只补一个禁用态（翻到今天时"后一天"失效，
+   顺带挡住禁用态的 hover 发亮——点了没反应还发亮，会让人以为坏了） */
+button.hr-nav-btn:disabled {
+	opacity: .35;
+	cursor: default;
+}
+button.hr-nav-btn:disabled:hover {
+	background: transparent;
+	color: var(--text-muted);
+}
+/* 睡眠的差值走睡眠色相：计数归强调色、睡眠归蓝紫，颜色本身说明这个数比的是什么 */
+.hr-today-delta.is-sleep,
+.hr-stat-delta.is-sleep {
+	color: hsl(var(--hr-sleep-h) 58% 42%);
+}
+body.theme-dark .hr-today-delta.is-sleep,
+body.theme-dark .hr-stat-delta.is-sleep {
+	color: hsl(var(--hr-sleep-h) 62% 74%);
+}
+/* 总览条格子等宽：标签长短不齐，数字也要排成一列，一格一格的节奏才立得住 */
+.hr-today-item {
+	flex: 1 1 0;
+	min-width: 88px;
+}
+.is-mobile .hr-today-item {
+	flex: 0 0 auto;
+	min-width: 84px;
+}
+/* 新库/还没攒出可比数据的引导行 */
+.hr-today-hint {
+	font-size: var(--hr-fs-note);
+	color: var(--text-faint);
+}
+/* 快记标题行的右侧动作组（撤销/管理类型），间距收紧成一簇 */
+.hr-section-acts {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+/* 手机横滑的边缘渐隐：右边还有格子被挡住时右缘淡出，滚过去了左缘也淡出 */
+.is-mobile .hr-today-strip.is-more-right {
+	-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+	mask-image: linear-gradient(to right, #000 calc(100% - 16px), transparent);
+}
+.is-mobile .hr-today-strip.is-more-left {
+	-webkit-mask-image: linear-gradient(to left, #000 calc(100% - 16px), transparent);
+	mask-image: linear-gradient(to left, #000 calc(100% - 16px), transparent);
+}
+.is-mobile .hr-today-strip.is-more-left.is-more-right {
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+	mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+/* 手机上统计条 2×2：一行四格在 390px 里数值差值挤成一团，两行两列数值能舒展开 */
+.is-mobile .hr-stat {
+	flex: 1 1 calc(50% - 3px);
+}
+/* 明细按时段分组的小标签 */
+.hr-list-period {
+	font-size: var(--hr-fs-meta);
+	color: var(--text-faint);
+	padding: 8px 2px 2px;
+}
+/* 周/月窗口全空的引导行（统计条内占满一行） */
+.hr-stat-hint {
+	flex-basis: 100%;
+	font-size: var(--hr-fs-note);
+	color: var(--text-faint);
+	text-align: center;
+	padding: 2px 0 4px;
 }

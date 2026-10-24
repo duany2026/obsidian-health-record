@@ -1,9 +1,9 @@
 {
 	"id": "health-record",
 	"name": "健康记录",
-	"version": "0.7.4",
+	"version": "0.8.0",
 	"minAppVersion": "1.4.0",
-	"description": "记录睡眠与自定义习惯的自用健康插件：侧边栏一键记录、周月复盘，数据存在仓库内的 Markdown 文件，适配双端。",
+	"description": "记录睡眠与自定义习惯的自用健康插件：侧栏一键记录、昨今对比与周月环比复盘，数据是仓库内的 Markdown 文件，适配双端。",
 	"author": "duany",
 	"isDesktopOnly": false
 }
