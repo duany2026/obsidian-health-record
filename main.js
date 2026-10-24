@@ -576,12 +576,15 @@ var LEGEND_MARK = "格式：一天一节";
 
 /** 缺说明就补在标题下面。拿说明自己的文本当哨兵：补过一次就不会再补第二遍 */
 function withLegend(lines) {
-  if (lines.some((l) => l.indexOf(LEGEND_MARK) !== -1)) return lines;
   const mask = fenceMask(lines);
+  // 哨兵只认围栏外的行：用户把文件头这段说明抄进代码块示例时，真说明不能因此被跳过
+  if (lines.some((l, i) => !mask[i] && l.indexOf(LEGEND_MARK) !== -1)) return lines;
   // 围栏里的 `## 2026-10-05` 和 `# 标题` 是抄来的示例，不是文件的结构，
   // 照着它们定位会把说明插进别人的代码块里
   const firstDay = lines.findIndex((l, i) => !mask[i] && matchDayHeader(l) !== null);
-  let h1 = lines.findIndex((l, i) => !mask[i] && /^# (?!#)/.test(l));
+  // 容忍行首 BOM（个别 Windows 编辑器写入）：\uFEFF# 健康记录 也算文件标题。
+  // 不容的话，带 BOM 且缺说明的文件会被当成"没有标题"，首次写入补出第二个重复标题
+  let h1 = lines.findIndex((l, i) => !mask[i] && /^\uFEFF?# (?!#)/.test(l));
   // 只有"第一个日期分区之前"的大标题才算文件标题。手工文件里 `# 月度小结` 那种
   // 夹在中间，照原样找第一个 H1 会把说明插到正文里去
   if (h1 !== -1 && firstDay !== -1 && h1 > firstDay) h1 = -1;
@@ -3195,6 +3198,8 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   }
 
   onunload() {
+    // 关闭本插件的所有视图，避免禁用/重载后残留死视图
+    this.app.workspace.detachLeavesOfType(VIEW_TYPE_HEALTH);
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
   }
 
@@ -3567,7 +3572,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   async openCurrentFile() {
     try {
       const path = await this.manager.resolveWritePath(formatDate(new Date()));
-      const { file } = await this.manager.ensureFile(path, `# 健康记录\n`);
+      const { file } = await this.manager.ensureFile(path, fileIntro());
       await this.app.workspace.getLeaf(false).openFile(file);
     } catch (e) {
       console.error(LOG + "打开记录文件失败:", e);
