@@ -3204,13 +3204,11 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.addClass("hr-settings");
     containerEl.createEl("h2", { text: "健康记录设置" });
 
     // ---------- 复盘范围 ----------
     // 周一打开"本周"只有一格、月底打开"本月"要翻半天才看到今天，都是日历切法的代价；
     // 但"这周过得怎么样"确实有人要按日历算，所以做成一道选择而不是一处聪明
-    containerEl.createEl("h3", { text: "复盘范围" });
     new import_obsidian.Setting(containerEl)
       .setName("本周 / 本月怎么算")
       .setDesc("动态：近 7 天、近 30 天，窗口永远以今天收尾，周一打开也是完整一周。按日历：本周从周一到周日、本月从 1 号到今天，和日历对得上。")
@@ -3224,10 +3222,7 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.refreshAllViews();
         }));
 
-    // ---------- 记录文件 ----------
-    // 这里刻意不放"打开时停在哪个页""趋势默认指标"：那两个是每次用都会改的偏好，
-    // 视图里点一下就记住了，摆成设置项等于多两道没人愿意答的题。
-    containerEl.createEl("h3", { text: "记录文件" });
+    // ---------- 记录文件归档 ----------
     new import_obsidian.Setting(containerEl)
       .setName("归档方式")
       .setDesc("按月一个文件（2026-10月健康记录.md）还是按年一个文件（2026年健康记录.md）。切换只决定以后往哪个文件下笔，老文件原样留着、照样读得出来。")
@@ -3241,95 +3236,88 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.refreshAllViews();
         }));
 
-    const folderListEl = containerEl.createDiv({ cls: "hr-row-list" });
-    const renderFolders = (hits) => {
-      folderListEl.empty();
+    // ---------- 记录位置（原生 Setting 行：下拉选目录 + 重新扫描，与重要日子同一风格） ----------
+    let lastHits = [];
+    let folderDrop = null;
+    const renderFolderOptions = (hits) => {
+      if (!folderDrop) return;
       const groups = this.plugin.groupFolders(hits || []);
       const current = this.plugin.settings.storageFolder || "";
+      folderDrop.selectEl.empty();
+      let hasCurrent = false;
       for (const entry of groups) {
-        const row = folderListEl.createDiv({ cls: "hr-row" });
-        if (entry.folder === current) row.addClass("is-current");
-        const info = row.createDiv({ cls: "hr-row-main" });
-        info.createDiv({ cls: "hr-row-name", text: entry.folder || "仓库根目录" });
-        info.createDiv({ cls: "hr-row-sub", text: entry.count ? `发现 ${entry.count} 份记录文件` : (entry.folder === current ? "当前目录，还没有记录文件" : "新位置，第一次记录时自动创建") });
-        if (entry.folder === current) {
-          row.createDiv({ cls: "hr-row-tag", text: "使用中" });
-          continue;
-        }
-        row.createEl("button", { cls: "hr-mini-btn", text: "选这里" }).addEventListener("click", async () => {
-          this.plugin.settings.storageFolder = entry.folder;
+        const label = (entry.folder || "仓库根目录") + (entry.count ? `（${entry.count} 份记录文件）` : "");
+        folderDrop.addOption(entry.folder, label);
+        if (entry.folder === current) hasCurrent = true;
+      }
+      if (!hasCurrent) {
+        folderDrop.addOption(current, (current || "仓库根目录") + "（当前，第一次记录时自动创建）");
+      }
+      folderDrop.setValue(current);
+    };
+    new import_obsidian.Setting(containerEl)
+      .setName("记录位置")
+      .setDesc("记录文件放在哪个目录。按内容特征查找用右侧「重新扫描」（文件名以年份开头、里面有日期分区和记录行）；找到一处自动定位，找到多处在这里点选。换目录只决定以后往哪儿下笔，老文件原样留着。")
+      .addDropdown((drop) => {
+        folderDrop = drop;
+        drop.onChange(async (value) => {
+          this.plugin.settings.storageFolder = value;
           this.plugin.settings.folderPicked = true;
           await this.plugin.saveSettings();
-          // 换目录等于换数据源：不重刷的话侧栏还停在旧目录那份读数上，
-          // 看上去"换了个设置，记录却没变"，最容易被误会成没生效
+          // 换目录等于换数据源：不重刷的话侧栏还停在旧目录那份读数上
           this.plugin.refreshAllViews();
-          renderFolders(hits);
         });
-      }
-      if (!groups.some((g) => g.count)) {
-        folderListEl.createDiv({ cls: "hr-row-sub", text: "库里还没有记录文件，第一次点记录时会在上面这个位置新建一份。" });
-      }
-    };
-
-    let lastHits = [];
-    // 文件被手工增删时，让这一份列表自己重画——不调 display()，
+      })
+      .addButton((btn) => {
+        btn.setButtonText("重新扫描");
+        btn.onClick(async () => {
+          // 扫描要读每个候选文件，手机上可能卡一下：按钮先变灰，免得以为没响应
+          btn.setButtonText("扫描中…");
+          btn.setDisabled(true);
+          try {
+            lastHits = await this.plugin.scanRecordFiles();
+            // 扫描出来在哪就是在哪：只有一处有记录文件时直接认下来，不再让他确认一遍
+            if (await this.plugin.adoptScannedFolder(lastHits)) {
+              new import_obsidian.Notice("已按扫描结果定位记录文件");
+            }
+            renderFolderOptions(lastHits);
+          } catch (e) {
+            console.error(LOG + "扫描失败:", e);
+            new import_obsidian.Notice(LOG + "扫描失败");
+          }
+          btn.setButtonText("重新扫描");
+          btn.setDisabled(false);
+        });
+      });
+    renderFolderOptions(lastHits);
+    void (async () => {
+      try { lastHits = await this.plugin.scanRecordFiles(); } catch (e) { return; }
+      renderFolderOptions(lastHits);
+    })();
+    // 文件被手工增删时局部重扫更新下拉——不整页 display()，
     // display() 会把整页重排、手机上直接跳回顶部
     this.plugin.repaintSettings = () => {
       if (!containerEl.isConnected) {
         this.plugin.repaintSettings = null;
         return;
       }
-      void rescanQuiet();
+      void (async () => {
+        try { lastHits = await this.plugin.scanRecordFiles(); } catch (e) { return; }
+        renderFolderOptions(lastHits);
+      })();
     };
-    const rescanQuiet = async () => {
-      try {
-        lastHits = await this.plugin.scanRecordFiles();
-      } catch (e) {
-        return;
-      }
-      renderFolders(lastHits);
-    };
-    const rescan = async () => {
-      try {
-        lastHits = await this.plugin.scanRecordFiles();
-        // 扫描出来在哪就是在哪：只有一处有记录文件时直接认下来，不再让他确认一遍
-        if (await this.plugin.adoptScannedFolder(lastHits)) {
-          new import_obsidian.Notice("已按扫描结果定位记录文件");
-        }
-      } catch (e) {
-        console.error(LOG + "扫描失败:", e);
-        new import_obsidian.Notice(LOG + "扫描失败");
-      }
-      renderFolders(lastHits);
-    };
-    renderFolders(lastHits);
-    void rescan();
 
-    const scanRow = containerEl.createDiv({ cls: "hr-row hr-row-action" });
-    scanRow.createDiv({ cls: "hr-row-main" }).createDiv({ cls: "hr-row-sub", text: "按内容特征查找记录文件（文件名以年份开头、里面有日期分区和记录行）。找到一处就自动定位，找到多处再点选。" });
-    const scanBtn = scanRow.createEl("button", { cls: "hr-mini-btn", text: "重新扫描" });
-    scanBtn.addEventListener("click", async () => {
-      // 扫描要读每个候选文件，手机上可能卡一下：按钮先变灰并显示进度，免得以为没响应
-      scanBtn.textContent = "扫描中…";
-      scanBtn.disabled = true;
-      await rescan();
-      scanBtn.textContent = "重新扫描";
-      scanBtn.disabled = false;
-    });
-
-    // ---------- 记录类型（入口在侧边栏，这里只留一句话）----------
-    containerEl.createEl("h3", { text: "记录类型" });
-    containerEl.createDiv({
-      cls: "hr-setting-note",
-      text: "增删类型、换图标换颜色、决定显示与否，都在侧边栏「今日 → 快速记录 → 管理类型」里做。类型名就是写进 Markdown 的那一列，改名等于换新类型，所以只能删不能改。"
-    });
-
-    // ---------- 数据格式 ----------
-    const help = containerEl.createDiv({ cls: "hr-help" });
-    help.createEl("h3", { text: "数据格式" });
-    help.createEl("p", { text: "记录按「入睡那晚」归档：10-18 下的 23:40 → 07:10 表示 18 日晚睡、19 晨起。起床未记录时第三列留空。可以直接手工编辑，插件认不出的行会原样保留、不参与改写。" });
-    const pre = help.createEl("pre", { cls: "hr-code" });
-    pre.createEl("code", {
+    // ---------- 使用提示（与重要日子同一结构：h3 + ul） ----------
+    containerEl.createEl("h3", { text: "使用提示" });
+    const tips = containerEl.createEl("ul");
+    for (const tip of [
+      "增删类型、换图标换颜色、决定显示与否，都在侧边栏「今日 → 快速记录 → 管理类型」里做。类型名就是写进 Markdown 的那一列，改名等于换新类型，所以只能删不能改",
+      "记录按「入睡那晚」归档：10-18 下的 23:40 → 07:10 表示 18 日晚睡、19 晨起。起床未记录时第三列留空",
+      "记录文件是普通 Markdown，可直接手工编辑，插件认不出的行会原样保留、不参与改写",
+    ]) {
+      tips.createEl("li", { text: tip });
+    }
+    containerEl.createEl("pre").createEl("code", {
       text: `## 2026-10-18
 
 - 睡眠 | 23:40 | 07:10

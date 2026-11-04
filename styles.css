@@ -2384,25 +2384,7 @@ button.hr-icon-opt.is-on {
 	}
 }
 
-/* ---------- 设置页 ---------- */
-
-.hr-help {
-	margin-top: 24px;
-	color: var(--text-muted);
-	font-size: 13px;
-	line-height: 1.6;
-}
-
-.hr-code {
-	background: var(--hr-surface);
-	border: 1px solid transparent;
-	box-shadow: var(--hr-shadow-card);
-	border-radius: var(--hr-radius-btn);
-	padding: 12px;
-	font-size: 12px;
-	line-height: 1.6;
-	overflow-x: auto;
-}
+/* ---------- 设置页（原生 Setting 风格，自绘样式已随卡片列表移除） ---------- */
 
 /* ---------- 动效与可访问性 ---------- */
 
@@ -2677,73 +2659,6 @@ button.hr-icon-opt.is-on {
 /* 侧栏宽度是拖出来的，跟视口无关，所以按 is-narrow 反着来而不是按断点 */
 .hr-root:not(.is-narrow) .hr-quick-grid {
 	grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-/* ---------- 设置页 ----------
- * 字号一律用 Obsidian 的 UI 字体变量，手机上"设置→字体大小"才会真的生效；
- * 行结构照月历任务的类别行：色点 + 名称/说明 + 控件，自己画而不是套 Setting
- */
-
-.hr-settings .hr-setting-note {
-	font-size: var(--font-ui-small);
-	color: var(--text-muted);
-	line-height: 1.5;
-	margin: -4px 0 10px;
-}
-
-.hr-row-list {
-	margin: 0 0 18px;
-	padding: 0 0 4px;
-	border-bottom: 1px solid var(--hr-edge);
-}
-
-.hr-row {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 7px 8px;
-	margin: 0 -8px;
-	border-radius: 8px;
-}
-
-/* 扫描那一行：和上面的文件夹列表之间要有个分隔，不然像同一组里的最后一项 */
-.hr-row.hr-row-action {
-	margin-top: 6px;
-	padding-top: 10px;
-	border-top: 1px solid var(--hr-edge);
-}
-
-.hr-row.is-current {
-	background: var(--hr-tint);
-}
-
-
-.hr-row-main {
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-.hr-row-name {
-	font-size: var(--font-ui-medium);
-	color: var(--text-normal);
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.hr-row-sub {
-	font-size: var(--font-ui-small);
-	color: var(--text-faint);
-	line-height: 1.4;
-}
-
-.hr-row-tag {
-	flex: 0 0 auto;
-	font-size: var(--font-ui-smaller);
-	padding: 3px 9px;
-	border-radius: 999px;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
 }
 
 button.hr-mini-btn {
