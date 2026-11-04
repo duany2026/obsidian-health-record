@@ -3246,8 +3246,7 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
       folderDrop.selectEl.empty();
       let hasCurrent = false;
       for (const entry of groups) {
-        const label = (entry.folder || "仓库根目录") + (entry.count ? `（${entry.count} 份记录文件）` : "");
-        folderDrop.addOption(entry.folder, label);
+        folderDrop.addOption(entry.folder, entry.folder || "仓库根目录");
         if (entry.folder === current) hasCurrent = true;
       }
       if (!hasCurrent) {
