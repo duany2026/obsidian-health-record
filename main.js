@@ -358,7 +358,7 @@ function formatDateLabel(dateStr) {
 function paintIcon(el, name, fallback) {
   try {
     (0, import_obsidian.setIcon)(el, name);
-  } catch (e) {
+  } catch {
     el.empty();
   }
   if (el.querySelector("svg")) return;
@@ -807,7 +807,7 @@ var RecordManager = class {
     try {
       const content = await this.app.vault.cachedRead(file);
       return /^## \d{4}-\d{1,2}-\d{1,2}(?:\s|$)/m.test(content) && /^- \S+\s*\|\s*\d{1,2}:\d{2}/m.test(content);
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -1140,7 +1140,7 @@ function previousViewRange(range, rolling, tab) {
 var SVG_NS = "http://www.w3.org/2000/svg";
 
 function svgEl(parent, tag, attrs) {
-  const el = document.createElementNS(SVG_NS, tag);
+  const el = activeDocument.createElementNS(SVG_NS, tag);
   if (attrs) for (const key of Object.keys(attrs)) el.setAttribute(key, String(attrs[key]));
   parent.appendChild(el);
   return el;
@@ -1429,12 +1429,12 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
-    for (const t of this.timers) clearTimeout(t);
+    for (const t of this.timers) window.clearTimeout(t);
     this.timers.clear();
   }
 
   later(fn, ms) {
-    const t = setTimeout(() => {
+    const t = window.setTimeout(() => {
       this.timers.delete(t);
       fn();
     }, ms);
@@ -1471,8 +1471,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
   }
 
   scheduleChartResize() {
-    if (this.resizeTimer) clearTimeout(this.resizeTimer);
-    this.resizeTimer = setTimeout(() => {
+    if (this.resizeTimer) window.clearTimeout(this.resizeTimer);
+    this.resizeTimer = window.setTimeout(() => {
       this.resizeTimer = null;
       void this.render();
     }, 220);
@@ -1841,7 +1841,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       strip.classList.toggle("is-more-left", strip.scrollLeft > 1);
     };
     strip.addEventListener("scroll", updFade, { passive: true });
-    requestAnimationFrame(updFade);
+    window.requestAnimationFrame(updFade);
     // 刚开始记还没攒出可比的昨天：整排灰字看着像坏了，给一行实话
     if (isToday && day.total === 0 && (!prevDay || (prevDay.total === 0 && prevDay.sleeps.length === 0))) {
       host.createDiv({ cls: "hr-today-hint", text: "从今天记起，明天这里就能和今天比" });
@@ -2003,7 +2003,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
         // 0.8.0：记完给一次轻脉冲；「问内容」型会打开弹窗，不闪
         if (!meta.ask) {
           btn.addClass("hr-quick-flash");
-          setTimeout(() => btn.removeClass("hr-quick-flash"), 420);
+          window.setTimeout(() => btn.removeClass("hr-quick-flash"), 420);
         }
       });
       btn.setAttribute("aria-label", `记录${meta.name}（今天已 ${count} 次）`);
@@ -2966,7 +2966,7 @@ var RecordEditModal = class extends import_obsidian.Modal {
   }
 
   later(fn, ms) {
-    setTimeout(fn, ms);
+    window.setTimeout(fn, ms);
   }
 
   onClose() {
@@ -3195,6 +3195,22 @@ function sanitizeTypeName(raw) {
   return name;
 }
 
+// 官方原生分区：Obsidian 1.11+ 用 SettingGroup（组标题 + 组内分隔线都由宿主画），
+// 返回"该往哪儿 append 设置行"的容器。旧版本没有 SettingGroup 时回退成
+// Setting.setHeading() 标题行，行仍直接落在页面上，形状一致、不自己写 CSS。
+// 四个插件共用同一段写法，改一处即可对齐。
+function settingsSection(containerEl, title) {
+  const Group = import_obsidian.SettingGroup;
+  if (typeof Group === "function") {
+    const group = new Group(containerEl);
+    group.setHeading(title);
+    return group.listEl;
+  }
+  const heading = new import_obsidian.Setting(containerEl).setName(title);
+  if (typeof heading.setHeading === "function") heading.setHeading();
+  return containerEl;
+}
+
 var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -3204,12 +3220,12 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "健康记录设置" });
 
-    // ---------- 复盘范围 ----------
+    // ---------- 显示 ----------
+    const displayEl = settingsSection(containerEl, "显示");
     // 周一打开"本周"只有一格、月底打开"本月"要翻半天才看到今天，都是日历切法的代价；
     // 但"这周过得怎么样"确实有人要按日历算，所以做成一道选择而不是一处聪明
-    new import_obsidian.Setting(containerEl)
+    new import_obsidian.Setting(displayEl)
       .setName("本周 / 本月怎么算")
       .setDesc("动态：近 7 天、近 30 天，窗口永远以今天收尾，周一打开也是完整一周。按日历：本周从周一到周日、本月从 1 号到今天，和日历对得上。")
       .addDropdown((drop) => drop
@@ -3222,13 +3238,18 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.refreshAllViews();
         }));
 
-    // ---------- 记录文件归档 ----------
-    new import_obsidian.Setting(containerEl)
-      .setName("归档方式")
-      .setDesc("按月一个文件（2026-10月健康记录.md）还是按年一个文件（2026年健康记录.md）。切换只决定以后往哪个文件下笔，老文件原样留着、照样读得出来。")
+    // ---------- 归档与位置 ----------
+    const storageEl = settingsSection(containerEl, "归档与位置");
+    // 示例文件名跟着当前年月走：写死"2026-10月"过两个月就成了旧数字
+    const now = new Date();
+    const egYear = now.getFullYear();
+    const egMonth = `${egYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    new import_obsidian.Setting(storageEl)
+      .setName("归档周期")
+      .setDesc("切换只决定以后往哪个文件下笔，老文件原样留着、照样读得出来。")
       .addDropdown((drop) => drop
-        .addOption("month", "按月")
-        .addOption("year", "按年")
+        .addOption("month", `按月（${egMonth}月健康记录.md）`)
+        .addOption("year", `按年（${egYear}年健康记录.md）`)
         .setValue(this.plugin.settings.archivePeriod)
         .onChange(async (value) => {
           this.plugin.settings.archivePeriod = value;
@@ -3236,7 +3257,7 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.refreshAllViews();
         }));
 
-    // ---------- 记录位置（原生 Setting 行：下拉选目录 + 重新扫描，与重要日子同一风格） ----------
+    // ---------- 记录位置（下拉选目录 + 重新扫描；四个插件统一成这一副形状） ----------
     let lastHits = [];
     let folderDrop = null;
     const renderFolderOptions = (hits) => {
@@ -3254,7 +3275,7 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
       }
       folderDrop.setValue(current);
     };
-    new import_obsidian.Setting(containerEl)
+    new import_obsidian.Setting(storageEl)
       .setName("记录位置")
       .setDesc("记录文件放在哪个目录。按内容特征查找用右侧「重新扫描」（文件名以年份开头、里面有日期分区和记录行）；找到一处自动定位，找到多处在这里点选。换目录只决定以后往哪儿下笔，老文件原样留着。")
       .addDropdown((drop) => {
@@ -3290,7 +3311,7 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
       });
     renderFolderOptions(lastHits);
     void (async () => {
-      try { lastHits = await this.plugin.scanRecordFiles(); } catch (e) { return; }
+      try { lastHits = await this.plugin.scanRecordFiles(); } catch { return; }
       renderFolderOptions(lastHits);
     })();
     // 文件被手工增删时局部重扫更新下拉——不整页 display()，
@@ -3301,29 +3322,13 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
         return;
       }
       void (async () => {
-        try { lastHits = await this.plugin.scanRecordFiles(); } catch (e) { return; }
+        try { lastHits = await this.plugin.scanRecordFiles(); } catch { return; }
         renderFolderOptions(lastHits);
       })();
     };
 
-    // ---------- 使用提示（与重要日子同一结构：h3 + ul） ----------
-    containerEl.createEl("h3", { text: "使用提示" });
-    const tips = containerEl.createEl("ul");
-    for (const tip of [
-      "增删类型、换图标换颜色、决定显示与否，都在侧边栏「今日 → 快速记录 → 管理类型」里做。类型名就是写进 Markdown 的那一列，改名等于换新类型，所以只能删不能改",
-      "记录按「入睡那晚」归档：10-18 下的 23:40 → 07:10 表示 18 日晚睡、19 晨起。起床未记录时第三列留空",
-      "记录文件是普通 Markdown，可直接手工编辑，插件认不出的行会原样保留、不参与改写",
-    ]) {
-      tips.createEl("li", { text: tip });
-    }
-    containerEl.createEl("pre").createEl("code", {
-      text: `## 2026-10-18
-
-- 睡眠 | 23:40 | 07:10
-- 水 | 08:20
-- 水 | 09:30
-- 运动 | 07:00 | 五公里`
-    });
+    // 长说明与文件格式示例已移到 README「数据文件」：设置页只留设置，
+    // 手机端打开不必先划一整屏才看到开关（与月历 v1.7.2 同一判断）
   }
 };
 
@@ -3404,7 +3409,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   onunload() {
     // 关闭本插件的所有视图，避免禁用/重载后残留死视图
     this.app.workspace.detachLeavesOfType(VIEW_TYPE_HEALTH);
-    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+    if (this._refreshTimer) window.clearTimeout(this._refreshTimer);
   }
 
   // ---------- 设置 ----------
@@ -3504,7 +3509,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
           const at = file.path.lastIndexOf("/");
           hits.push({ path: file.path, folder: at === -1 ? "" : file.path.substring(0, at) });
         }
-      } catch (e) {
+      } catch {
         // 读不动的文件跳过，不让一次 IO 失败毁掉整次扫描
       }
     }
@@ -3574,8 +3579,8 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   }
 
   scheduleRefresh(delay) {
-    if (this._refreshTimer) clearTimeout(this._refreshTimer);
-    this._refreshTimer = setTimeout(() => {
+    if (this._refreshTimer) window.clearTimeout(this._refreshTimer);
+    this._refreshTimer = window.setTimeout(() => {
       this._refreshTimer = null;
       this.refreshAllViews();
     }, delay);
@@ -3754,7 +3759,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
       if (!done.length) return "";
       done.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.onset < b.onset ? -1 : 1));
       return done[done.length - 1].onset;
-    } catch (e) {
+    } catch {
       return "";
     }
   }

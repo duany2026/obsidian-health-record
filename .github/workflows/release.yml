@@ -1,13 +1,23 @@
 name: Release
 
-# 推送 v* 标签时自动打包插件并创建 Release（照 obsidian-monthly-tasks 那条发布链写的）
+# 官方上架要求：Release 的 tag 必须与 manifest.json 里的 version 逐字相同，
+# 不带 v 前缀（Obsidian 是按「tag == manifest.version」去找发行版再下载资产的）。
+# 所以这里触发所有 tag，并在下一步把不合格式的 tag 直接拦下来，而不是让它
+# 产出一个目录永远认不到的发行版。
+#
+# 旧写法或在 main 推送时自动打 `v${VER}`，或只认 `v*` 标签：那样产出的 tag 目录认不到，
+# 而且只上传了 ZIP——Obsidian 客户端是逐个下载 main.js / manifest.json / styles.css
+# 三份独立附件的，ZIP 它不认，所以旧发行版即使标签对了也装不上。两处一起改掉。
 on:
   push:
     tags:
-      - 'v*'
+      - '*'
 
 permissions:
   contents: write
+  # actions/attest 要用 OIDC 令牌签名，并把证明文件写进仓库的证明存储
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -16,39 +26,106 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 打包插件
+      - name: 校验 tag 与 manifest 版本一致
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          VER="${TAG#v}"
+          VER="$(node -p "require('./manifest.json').version")"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::tag「${TAG}」与 manifest.json 的 version「${VER}」不一致。官方要求两者逐字相同且不带 v 前缀，请改用 git tag -a ${VER} -m ${VER}"
+            exit 1
+          fi
+          # 版本号必须是 x.y.z：目录只认这一种格式
+          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version「${VER}」不是 x.y.z 三段式，社区目录只支持这一种格式"
+            exit 1
+          fi
+          # versions.json 必须登记当前版本，否则老版本 Obsidian 装不到匹配的 minAppVersion
+          node -e "
+            const v = require('./manifest.json').version;
+            const map = require('./versions.json');
+            if (!Object.prototype.hasOwnProperty.call(map, v)) {
+              console.error('::error::versions.json 里没有 ' + v + ' 这一条');
+              process.exit(1);
+            }
+          "
+          echo "tag / manifest / versions.json 三者一致：${VER}"
+
+      - name: 校验 main.js 语法
+        run: |
+          set -euo pipefail
+          # 本仓库没有构建步骤，main.js 就是唯一源码，语法错会直接让插件加载失败
+          node --check main.js
+
+      - name: 生成资产证明（官方上架流程要求的可验证构建来源）
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      - name: 打包手动安装用的 ZIP
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME}"
           rm -rf dist
           mkdir -p dist/health-record
+          # 逐个点名，不用通配：本地 data.json 存着作者自己的数据文件路径，
+          # 带进发行版会让新用户跳过自动扫描并指向一个他们库里不存在的文件
           cp main.js manifest.json styles.css versions.json README.md LICENSE dist/health-record/
           cd dist
           zip -r "health-record-${VER}.zip" health-record
           ls -l
 
-      - name: 写发行说明
+      - name: 从 README 版本记录提取发行说明
         run: |
           set -euo pipefail
-          TAG="${GITHUB_REF_NAME}"
-          VER="${TAG#v}"
-          {
-            printf '健康记录 %s\n\n' "$VER"
-            printf '下载 `health-record-%s.zip`，解压后把整个 `health-record` 文件夹放进你的笔记库 `.obsidian/plugins/` 里，重启 Obsidian 后在第三方插件中启用。\n\n' "$VER"
-            printf '版本变化见本页 Releases；逐轮开发日志留在维护者本机，不随仓库发布。\n'
-          } > RELEASE_NOTES.md
-          cat RELEASE_NOTES.md
+          VER="${GITHUB_REF_NAME}"
+          awk -v ver="$VER" '
+            index($0, "### " ver) == 1 { f=1; next }
+            f && /^### / { exit }
+            f && /^## / { exit }
+            f { print }
+          ' README.md > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            printf '健康记录 %s\n' "$VER" > RELEASE_NOTES.md
+          fi
+          printf '\n下载 `health-record-%s.zip`，解压后把 `health-record` 文件夹放进笔记库 `.obsidian/plugins/`。\n' "$VER" >> RELEASE_NOTES.md
+          head -20 RELEASE_NOTES.md
 
       - name: 创建 / 更新 Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          # 先试仓库 Secret 里的个人令牌 RELEASE_TOKEN——用它发布时，发行版页面的发布人是「duany2026」。
+          # 该 Secret 缺失、写错或**已过期**时，自动退回内置 GITHUB_TOKEN（发布人显示为机器人）。
+          # 不要写成 `secrets.RELEASE_TOKEN || github.token`：那个 `||` 只在 Secret 完全不存在时才回退，
+          # 令牌过期后它照样被选中，于是整条发布链在「Bad credentials」上静默断掉。
+          PERSONAL_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          RUNNER_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/health-record-*.zip --clobber
-            gh release edit "$TAG" --title "健康记录 ${TAG}" --notes-file RELEASE_NOTES.md
+          set -uo pipefail
+          # 官方要求 main.js / manifest.json / styles.css 作为三个独立的二进制附件上传：
+          # Obsidian 客户端逐个下载这三份，ZIP 它不认。ZIP 仍然保留，供手动安装与本地备份。
+          ASSETS=(main.js manifest.json styles.css dist/health-record-*.zip)
+          publish() {
+            export GH_TOKEN="$1"
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release upload "$TAG" "${ASSETS[@]}" --clobber || return 1
+              gh release edit "$TAG" \
+                --title "健康记录 ${TAG}" \
+                --notes-file RELEASE_NOTES.md || return 1
+            else
+              gh release create "$TAG" "${ASSETS[@]}" \
+                --title "健康记录 ${TAG}" \
+                --notes-file RELEASE_NOTES.md || return 1
+            fi
+          }
+          if [ -n "${PERSONAL_TOKEN:-}" ] && publish "$PERSONAL_TOKEN"; then
+            echo "已用个人令牌发布（发布人＝令牌属主）"
+          elif publish "$RUNNER_TOKEN"; then
+            echo "个人令牌不可用，已退回内置令牌发布（发布人＝github-actions[bot]）；请尽快更新 RELEASE_TOKEN"
           else
-            gh release create "$TAG" dist/health-record-*.zip --title "健康记录 ${TAG}" --notes-file RELEASE_NOTES.md
+            echo "::error::个人令牌与内置令牌都无法创建 Release"
+            exit 1
           fi

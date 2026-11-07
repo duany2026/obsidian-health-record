@@ -25,12 +25,15 @@
  *    弹窗里的按钮拿不到 --hr-fill（底色没了）、拿不到 --hr-radius-btn（圆角归 0），
  *    同一副控件在侧栏里是胶囊、在弹窗里是方块——这就是"外边框不协调"的真正原因，
  *    跟颜色无关。.ref/check-style.js 会盯着这条。 */
+/* 设置页不在这份名单里：它全用 Obsidian 原生 Setting / SettingGroup，吃宿主自己的
+   变量和间距，不需要 hr-* 这套皮。原先这里挂着 .hr-settings（连暗色、box-sizing、
+   手机 hover、手机字号一共五处），但 main.js 从没给设置页加过这个类，是死选择器，
+   已清掉——别再往回加，加了也不生效，只会让人以为设置页跟侧栏是同一副控件。 */
 .hr-root,
 .modal,
 .hr-modal,
 .hr-types,
-.hr-picker,
-.hr-settings {
+.hr-picker {
 	/* 两层谁白谁灰这件事，方向比差值更要命。园长真机上一连两版都栽在这儿：
 	   ① 卡面 = 页面 = 主题的 secondary（#f6f6f6 vs #f6f6f6）→ 差值为零，"看不到底色"；
 	   ② 改成卡面 = 白、页面 = 白压黑 8%（#EBEBEB）→ 差 21 档是看得见，可整片页面底发灰，
@@ -116,8 +119,7 @@ body.theme-dark .hr-root,
 body.theme-dark .modal,
 body.theme-dark .hr-modal,
 body.theme-dark .hr-types,
-body.theme-dark .hr-picker,
-body.theme-dark .hr-settings {
+body.theme-dark .hr-picker {
 	/* 暗色下所有"淡墨"换成"淡白"：黑阴影压在深底上不显形，灰描边压在提亮过的卡面上是零差。
 	   两层方向反过来不需要重算：暗色下主题的 secondary 本来就比 primary 亮一档，
 	   卡面拿 secondary、页面拿 primary，园长认过的就是这副，不动 */
@@ -145,14 +147,12 @@ body.theme-dark .hr-settings {
 .hr-modal,
 .hr-types,
 .hr-picker,
-.hr-settings,
 .hr-root *,
 .hr-root ::before,
 .hr-root ::after,
 .hr-modal *,
 .hr-types *,
-.hr-picker *,
-.hr-settings * {
+.hr-picker * {
 	box-sizing: border-box;
 }
 
@@ -2555,8 +2555,7 @@ button.hr-icon-opt.is-on {
 	.hr-root,
 	.hr-modal,
 	.hr-types,
-	.hr-picker,
-	.hr-settings {
+	.hr-picker {
 		--hr-fill-hover: var(--hr-fill);
 		--hr-fg-hover: var(--text-muted);
 		--hr-ghost-hover: transparent;
@@ -2727,8 +2726,7 @@ button.hr-mini-btn.is-armed {
 .is-mobile .hr-root,
 .is-mobile .hr-modal,
 .is-mobile .hr-types,
-.is-mobile .hr-picker,
-.is-mobile .hr-settings {
+.is-mobile .hr-picker {
 	--hr-fs-ctl: 14px;
 	--hr-fs-note: 13px;
 }
