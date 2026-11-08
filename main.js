@@ -3348,10 +3348,10 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
       void this.saveSettings();
     });
     this.manager.onSelfWrite = (filePath) => {
-      // 记的是"哪一份文件、什么时候"，不是一个全局时间戳：
-      // 只写一份文件时另一份的改动也会被那道 500ms 保护吞掉（同步盘落地、
-      // 或者目录里同时有月和年的两份文件时最容易出现）
-      this._lastSelfWrite = { path: filePath, at: Date.now() };
+      // 一次性标记：只认紧跟着这次写入来的那一个 modify 回声。
+      // 以前是「同路径 + 500ms」的时间窗，同步盘或手工编辑若落在窗口里会被一起吞掉，
+      // 连读缓存都不失效，界面最长 5 秒还显示旧数。
+      this._pendingSelfWrite = filePath;
     };
 
     this.registerView(VIEW_TYPE_HEALTH, (leaf) => new HealthRecordView(leaf, this));
@@ -3567,14 +3567,17 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     if (!this.isOurFile(file.path)) return;
     // 增删改都可能让"目录里有哪些记录文件"的清单过期
     if (invalidate) this.manager.filesCache = null;
-    // 自己写入触发的 modify 已经由调用处刷新，跳过以免闪一下。
-    // 但这道保护只管 modify：删文件、新建文件永远不是自己的回声，
-    // 之前一起挡掉，导致刚记完一笔再删掉整个文件时读数不动
-    const sw = this._lastSelfWrite;
-    if (!invalidate && sw && sw.path === file.path && Date.now() - sw.at < 500) return;
+    // 无论是不是自己的回声，读缓存都必须失效：外部改动下次渲染一定要读到新内容。
+    // 以前把回声整个 return 掉，连 dropFileCache 一起跳过，同步盘落地会被吞掉。
     this.manager.dropFileCache(file.path);
     // 设置页开着的时候那份目录列表也要跟着动，不然"发现 1 份记录文件"会一直挂着
     if (this.repaintSettings) this.repaintSettings();
+    // 回声标记一次性消费：只有紧跟自写的那一个 modify 跳过刷新（调用处已经刷过）。
+    // 之后同路径的任何改动，包括同步盘与手工编辑，都照常排队刷新。
+    if (!invalidate && this._pendingSelfWrite === file.path) {
+      this._pendingSelfWrite = null;
+      return;
+    }
     this.scheduleRefresh(300);
   }
 

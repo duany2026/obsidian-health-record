@@ -2,7 +2,7 @@
 	"id": "health-record",
 	"name": "Health Record",
 	"version": "0.8.2",
-	"minAppVersion": "1.4.0",
+	"minAppVersion": "1.11.0",
 	"description": "Log sleep and personal habits from a sidebar panel, then review them with day-over-day and week-over-week comparisons, all stored in plain Markdown files.",
 	"author": "duany",
 	"authorUrl": "https://github.com/duany2026",
