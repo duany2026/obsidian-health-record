@@ -469,6 +469,22 @@ function fenceMask(lines) {
   return mask;
 }
 
+/** 扫完 lines 后仍然开着的围栏规格（{char,length}），全闭合则 null。写侧补闭合用 */
+function openFenceSpec(lines) {
+  let fence = null;
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (fence) {
+      const close = new RegExp(`^${fence.char}{${fence.length},}$`);
+      if (close.test(t)) fence = null;
+    } else {
+      const open = t.match(/^(`{3,}|~{3,})/);
+      if (open) fence = { char: open[1][0], length: open[1].length };
+    }
+  }
+  return fence;
+}
+
 /** 解析整份月文件，返回带来源定位（行号 + 原文）的记录数组 */
 function parseRecords(content, filePath) {
   const records = [];
@@ -692,8 +708,12 @@ function applyRecordInsert(content, dateStr, record, eol) {
     if (beforeIdx === -1) {
       while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
       // 文件末尾还开着一个没闭合的围栏：新的一天不能写进围栏里——读侧不认围栏内的行，
-      // 写进去就是"记了却看不见、删不掉"。先替他补一行闭合，再空一行起新分区
-      if (lines.length && mask[lines.length - 1]) lines.push("```");
+      // 写进去就是"记了却看不见、删不掉"。先替他补一行闭合，再空一行起新分区。
+      // 补的闭合必须与原围栏同字符且同长：``` 收不住 ~~~ 或 ````
+      if (lines.length && mask[lines.length - 1]) {
+        const spec = openFenceSpec(lines);
+        if (spec) lines.push(spec.char.repeat(spec.length));
+      }
       lines.push("", ...block);
     } else {
       // 插到"下一个日期分区标题"之前：标题前本就有空行，段落间隔天然保持一个
