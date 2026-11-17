@@ -57,6 +57,12 @@ jobs:
           # 本仓库没有构建步骤，main.js 就是唯一源码，语法错会直接让插件加载失败
           node --check main.js
 
+      - name: 跑回归测试
+        run: |
+          set -euo pipefail
+          # 44 项读写回归（解析/写入/撤销/冲突副本），不过不发版
+          node tests/regression.js
+
       - name: 生成资产证明（官方上架流程要求的可验证构建来源）
         uses: actions/attest@v4
         with:

@@ -448,14 +448,23 @@ function parseUnregisteredLine(line) {
  */
 function fenceMask(lines) {
   const mask = new Array(lines.length).fill(false);
-  let open = false;
+  // 只认 ``` 的原实现，遇到 ~~~ 或四个反引号围成的块会漏判，于是块里的
+  // `## 2026-10-05` 照样被当分区边界。围栏必须同字符闭合，且闭栏长度
+  // 不小于开栏（``` 收不住 ````，反之不成立）
+  let fence = null;
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim().startsWith("```")) {
-      open = !open;
+    const t = lines[i].trim();
+    if (fence) {
       mask[i] = true;
+      const close = new RegExp(`^${fence.char}{${fence.length},}$`);
+      if (close.test(t)) fence = null;
       continue;
     }
-    mask[i] = open;
+    const open = t.match(/^(`{3,}|~{3,})/);
+    if (open) {
+      fence = { char: open[1][0], length: open[1].length };
+      mask[i] = true;
+    }
   }
   return mask;
 }
@@ -590,6 +599,18 @@ function withLegend(lines) {
   if (h1 !== -1 && firstDay !== -1 && h1 > firstDay) h1 = -1;
   const body = lines.slice(h1 === -1 ? 0 : h1 + 1);
   while (body.length && body[0].trim() === "") body.shift();
+  // 没有标题的文件，开头若是 YAML 属性区，标题和说明要补在属性区后面：
+  // frontmatter 只在文件最顶生效，`# 健康记录` 顶在最前会把它整个变成正文
+  if (h1 === -1 && /^---[ \t]*$/.test(lines[0] || "")) {
+    const fmEnd = lines.findIndex((l, i) => i > 0 && /^---[ \t]*$/.test(l));
+    if (fmEnd !== -1) {
+      const fm = lines.slice(0, fmEnd + 1);
+      const afterFm = lines.slice(fmEnd + 1);
+      while (afterFm.length && afterFm[0].trim() === "") afterFm.shift();
+      return [...fm, "", "# 健康记录", "", ...FILE_LEGEND, "", ...afterFm];
+    }
+    // 属性区没有闭合行：无法确定边界，照旧当普通文件处理，别冒险插错
+  }
   // 没有标题的文件（手工新建的、或者刚创建的）连标题一起补，别多留一行空行
   const head = h1 === -1 ? ["# 健康记录"] : lines.slice(0, h1 + 1);
   return [...head, "", ...FILE_LEGEND, "", ...body];
@@ -3358,21 +3379,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     this.addRibbonIcon("activity", "健康记录", () => void this.activateView());
 
     this.addCommand({ id: "open-health-record", name: "打开健康记录", callback: () => void this.activateView() });
-    // 只登记"此刻还在类型清单里"的那几个：默认清单瘦身成睡眠 + 水之后，
-    // 命令面板里留五条点了只会弹「类型不存在」的死命令是说不过去的。
-    // 用户自己新建的同名类型也会拿到命令；反过来，Obsidian 没有卸载命令的 API，
-    // 删掉的类型要到下次启动才从面板里消失。
-    const quickCommands = [
-      [T_WATER, "record-water", "记一杯水"],
-      [T_TOILET, "record-toilet", "记一次如厕"],
-      [T_BREAKFAST, "record-breakfast", "记早餐"],
-      [T_LUNCH, "record-lunch", "记午餐"],
-      [T_DINNER, "record-dinner", "记晚餐"],
-      [T_SNACK, "record-snack", "记加餐"]
-    ];
-    for (const [type, id, name] of quickCommands) {
-      if (TYPE_MAP[type]) this.addCommand({ id, name, callback: () => void this.quickRecord(type) });
-    }
+    this.registerTypeCommands();
     this.addCommand({ id: "record-sleep-onset", name: "记录入睡", callback: () => void this.recordOnset() });
     this.addCommand({ id: "record-sleep-wake", name: "记录起床", callback: () => void this.recordWake() });
     this.addCommand({ id: "record-last-night-sleep", name: "记昨晚的睡眠（补记）", callback: () => this.openSleepMakeup() });
@@ -3477,8 +3484,34 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     void this.saveSettings();
   }
 
+  /** 按当前类型清单登记快记命令。启动时调一次；之后设置里新增类型时
+   * saveSettings 会再调——Obsidian 没有卸载命令的 API，不能按清单重排，
+   * 只能记住已登记的命令 ID，多出来的类型补一条，删掉的类型到下次启动
+   * 才从命令面板消失。命令 ID 与内置类型绑定；自建类型没有命令（名称到
+   * 命令 ID 没有稳定映射，用户改名后命令名也会指错） */
+  registerTypeCommands() {
+    if (!this._typeCmdRegistered) this._typeCmdRegistered = new Set();
+    // 只登记"此刻还在类型清单里"的那几个：默认清单瘦身成睡眠 + 水之后，
+    // 命令面板里留五条点了只会弹「类型不存在」的死命令是说不过去的
+    const quickCommands = [
+      [T_WATER, "record-water", "记一杯水"],
+      [T_TOILET, "record-toilet", "记一次如厕"],
+      [T_BREAKFAST, "record-breakfast", "记早餐"],
+      [T_LUNCH, "record-lunch", "记午餐"],
+      [T_DINNER, "record-dinner", "记晚餐"],
+      [T_SNACK, "record-snack", "记加餐"]
+    ];
+    for (const [type, id, name] of quickCommands) {
+      if (TYPE_MAP[type] && !this._typeCmdRegistered.has(id)) {
+        this._typeCmdRegistered.add(id);
+        this.addCommand({ id, name, callback: () => void this.quickRecord(type) });
+      }
+    }
+  }
+
   async saveSettings() {
     setTypes(this.settings.types);
+    this.registerTypeCommands();
     this.manager.updateSettings(this.settings);
     this.manager.invalidateCache();
     if (this._saveChain) {
