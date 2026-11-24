@@ -3786,8 +3786,8 @@ var RecordEditModal = class extends import_obsidian.Modal {
 
     const dateField = this.makeField(form, tr("edit.dateSleep"), "text", "YYYY-MM-DD", existing ? existing.date : this.opts.date);
     this.attachPicker(dateField, { kind: "date", title: tr("picker.dateTitle") });
-    // 新记录直接填默认值而不是只摆 placeholder——看起来像已填，存的时候却报「Bedtime must be HH:MM」
-    const onsetField = this.makeField(form, tr("edit.onset"), "text", "23:40", existing && isSleepType(existing.type) ? existing.onset : (this.opts.onset || "23:40"));
+    // placeholder 写 HH:MM 而不是示例时刻——23:40 看着像已填好的值，存的时候才报格式错
+    const onsetField = this.makeField(form, tr("edit.onset"), "text", "HH:MM", existing && isSleepType(existing.type) ? existing.onset : (this.opts.onset || ""));
     this.attachPicker(onsetField, {
       kind: "time",
       title: tr("edit.onsetPicker"),
@@ -3807,9 +3807,10 @@ var RecordEditModal = class extends import_obsidian.Modal {
         ? tr("edit.onsetSuggested", { onset: this.opts.onset })
         : tr("edit.onsetTip")
     });
-    const wakeField = this.makeField(form, tr("edit.wake"), "text", "07:10", existing && isSleepType(existing.type) ? existing.wake : (this.opts.wake || "07:10"));
+    // 起床列必须能留空——「只记入睡」是合法状态，预填会把待起床的记录写死成已完结
+    const wakeField = this.makeField(form, tr("edit.wake"), "text", "HH:MM", existing && isSleepType(existing.type) ? existing.wake : (this.opts.wake || ""));
     this.attachPicker(wakeField, { kind: "time", title: tr("edit.wakePicker") });
-    const timeField = this.makeField(form, tr("edit.time"), "text", "08:20", existing && !isSleepType(existing.type) ? existing.time : (this.opts.time || ""));
+    const timeField = this.makeField(form, tr("edit.time"), "text", "HH:MM", existing && !isSleepType(existing.type) ? existing.time : (this.opts.time || ""));
     this.attachPicker(timeField, { kind: "time", title: tr("edit.timePicker") });
     // 提示词不能写死"吃了什么 / 食堂"：清单是他自己的，加了「用药」「午休」之后，
     // 记一笔吃药却被告知"吃了什么"，等于界面在替他猜这一条是什么
