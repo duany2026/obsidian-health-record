@@ -57,6 +57,12 @@ jobs:
           # 本仓库没有构建步骤，main.js 就是唯一源码，语法错会直接让插件加载失败
           node --check main.js
 
+      - name: 校验 i18n 三语词典完整
+        run: |
+          set -euo pipefail
+          # 词典 key 对齐 + tr() 调用点有词条 + 语言映射齐全，缺了不发版
+          node scripts/check-i18n.mjs
+
       - name: 跑回归测试
         run: |
           set -euo pipefail
