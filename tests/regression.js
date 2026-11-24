@@ -777,6 +777,16 @@ function sampleFile(body) {
     assert.equal(r.saved, null, "读失败不能拿默认值覆盖 data.json");
   });
 
+  await test("内置类型的译名撞上自建类型时写回原名，读回不串类型", async () => {
+    await withTypes([{ name: "睡眠" }, { name: "水" }, { name: "Sleep" }], async () => {
+      const line = T.formatRecordLine({ type: "睡眠", onset: "23:40", wake: "07:10" }, "en");
+      assert.equal(line, "- 睡眠 | 23:40 | 07:10");
+      assert.equal(T.parseRecordLine(line).type, "睡眠");
+      assert.equal(T.formatRecordLine({ type: "水", time: "08:20" }, "en"), "- Water | 08:20");
+      assert.equal(T.parseRecordLine("- Sleep | 08:20").type, "Sleep", "自建的 Sleep 仍归自建");
+    });
+  });
+
   console.log("通过 " + passed + " 项，失败 " + failures.length + " 项");
   if (failures.length) process.exitCode = 1;
 })();

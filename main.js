@@ -1370,7 +1370,12 @@ function sanitizeNote(raw) {
 
 /** lang 给了就按该语言写内置类型名（写盘）；不给就用注册名，作行的身份比对 */
 function formatRecordLine(record, lang) {
-  const type = lang ? typeNameIn(record.type, lang) : record.type;
+  let type = record.type;
+  if (lang) {
+    const local = typeNameIn(record.type, lang);
+    // 译名撞上了用户自建的同名类型（比如自建了 Sleep）就退回原名，免得读回来认成那个自建类型
+    type = local !== record.type && Object.prototype.hasOwnProperty.call(TYPE_MAP, local) ? record.type : local;
+  }
   if (isSleepType(record.type)) {
     return record.wake ? `- ${type} | ${record.onset} | ${record.wake}` : `- ${type} | ${record.onset} |`;
   }
