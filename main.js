@@ -3773,7 +3773,7 @@ var RecordEditModal = class extends import_obsidian.Modal {
       // 不补进选项，整排芯片一个都不亮，看着像"没选类型"，保存还会顺手把它写成未注册行
       if (selected && choices.indexOf(selected) === -1) choices.unshift(selected);
       for (const type of choices) {
-        const chip = chips.createEl("button", { cls: "hr-chip-btn" + (type === selected ? " is-on" : ""), text: type });
+        const chip = chips.createEl("button", { cls: "hr-chip-btn" + (type === selected ? " is-on" : ""), text: typeLabel(type) });
         chip.addEventListener("click", () => {
           selected = type;
           paintChips();
