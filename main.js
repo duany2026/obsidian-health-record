@@ -4467,7 +4467,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     if (fresh) {
       const vault = this.app && this.app.vault;
       const order = [I18N_LANG, ...FILE_LANGS.filter((l) => l !== I18N_LANG)];
-      const existing = vault ? order.map((l) => FILE_FORMATS[l].folder).find((f) => vault.getAbstractFileByPath(f)) : null;
+      const existing = vault ? order.map((l) => FILE_FORMATS[l].folder).find((f) => vault.getAbstractFileByPath(f) instanceof import_obsidian.TFolder) : null;
       this.settings.storageFolder = existing || FILE_FORMATS[I18N_LANG].folder;
     }
     this.settings.storageFolder = this.sanitizeFolder(this.settings.storageFolder);

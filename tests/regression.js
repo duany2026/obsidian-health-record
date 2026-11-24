@@ -761,7 +761,7 @@ function sampleFile(body) {
     const run = async (lang, folders, loadData) => inLang(lang, async () => {
       const fake = Object.create(T.proto);
       let saved = null;
-      fake.app = { vault: { getAbstractFileByPath: (p) => (folders.includes(p) ? {} : null) } };
+      fake.app = { vault: { getAbstractFileByPath: (p) => (folders.includes(p) ? new TFolder() : p === "Health Records" ? new TFile() : null) } };
       fake.loadData = loadData || (async () => null);
       fake.saveData = async (d) => { saved = JSON.parse(JSON.stringify(d)); };
       await fake.loadSettings();
@@ -770,6 +770,8 @@ function sampleFile(body) {
     let r = await run("en", ["健康记录"]);
     assert.equal(r.folder, "健康记录", "换成英文后仍找回中文目录");
     assert.equal(r.saved.storageFolder, "健康记录");
+    r = await run("zh-TW", []);
+    assert.equal(r.folder, "健康記錄", "同名的是文件不是目录，不能拿来当目录");
     r = await run("zh-CN", []);
     assert.equal(r.folder, "健康记录");
     assert.equal(r.saved.storageFolder, "健康记录", "首次加载就存下来，之后换语言不再漂移");
