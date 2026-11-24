@@ -46,7 +46,7 @@ for (const m of src.matchAll(/\btr\(\s*"([^"]+)"/g)) called.add(m[1]);
 // 但不在 zh-CN 里的给警告——tr() 的兜底是 zh-CN，中文下兜底会拿到 key 原文
 const anyLang = new Set(LANGS.flatMap((l) => Object.keys(I18N[l] || {})));
 const unknown = [...called].filter((k) => {
-  if (k.endsWith(".")) return !anyLang.some((real) => real.startsWith(k));
+  if (k.endsWith(".")) return ![...anyLang].some((real) => real.startsWith(k));
   return !anyLang.has(k);
 });
 if (unknown.length) errors.push(`tr() 引用了不存在的 key: ${unknown.join(", ")}`);
