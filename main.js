@@ -4432,14 +4432,23 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
 
   async loadSettings() {
     let loaded = null;
+    let readFailed = false;
     try {
       loaded = await this.loadData();
     } catch (e) {
+      readFailed = true;
       console.error(LOG + "设置读取失败，改用默认值:", e);
     }
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded || {});
-    // 全新安装才按界面语言取默认目录；老用户存过的（含默认的「健康记录」）一律不动
-    if (!loaded) this.settings.storageFolder = FILE_FORMATS[I18N_LANG].folder;
+    // 全新安装才按界面语言取默认目录；老用户存过的（含默认的「健康记录」）一律不动。
+    // 库里已有某种语言的默认目录就接着用它，并且立刻存下来——否则没动过设置的人一换语言目录就变了
+    const fresh = !loaded && !readFailed;
+    if (fresh) {
+      const vault = this.app && this.app.vault;
+      const order = [I18N_LANG, ...FILE_LANGS.filter((l) => l !== I18N_LANG)];
+      const existing = vault ? order.map((l) => FILE_FORMATS[l].folder).find((f) => vault.getAbstractFileByPath(f)) : null;
+      this.settings.storageFolder = existing || FILE_FORMATS[I18N_LANG].folder;
+    }
     this.settings.storageFolder = this.sanitizeFolder(this.settings.storageFolder);
     if (!["month", "year"].includes(this.settings.archivePeriod)) this.settings.archivePeriod = "month";
     if (!["rolling", "calendar"].includes(this.settings.rangeMode)) this.settings.rangeMode = "rolling";
@@ -4455,6 +4464,13 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     setTypes(this.settings.types);
     // 指标清单跟着类型走，所以要在 setTypes 之后校验：类型被删了，默认指标回落睡眠
     if (!trendMetrics().some((m) => m.key === this.settings.trendMetric)) this.settings.trendMetric = "sleep";
+    if (fresh && typeof this.saveData === "function") {
+      try {
+        await this.saveData(this.settings);
+      } catch (e) {
+        console.error(LOG + "设置保存失败:", e);
+      }
+    }
   }
 
   /** 类型表规范化：睡眠永远排第一且不可缺，其余去重去空，上限 16 项 */

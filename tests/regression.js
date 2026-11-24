@@ -757,6 +757,26 @@ function sampleFile(body) {
     assert.equal(await run("en", { storageFolder: "我的/健康" }), "我的/健康", "自定义目录不动");
   });
 
+  await test("全新安装：库里已有其它语言的默认目录就沿用，并立即存盘；读设置出错不覆盖", async () => {
+    const run = async (lang, folders, loadData) => inLang(lang, async () => {
+      const fake = Object.create(T.proto);
+      let saved = null;
+      fake.app = { vault: { getAbstractFileByPath: (p) => (folders.includes(p) ? {} : null) } };
+      fake.loadData = loadData || (async () => null);
+      fake.saveData = async (d) => { saved = JSON.parse(JSON.stringify(d)); };
+      await fake.loadSettings();
+      return { folder: fake.settings.storageFolder, saved };
+    });
+    let r = await run("en", ["健康记录"]);
+    assert.equal(r.folder, "健康记录", "换成英文后仍找回中文目录");
+    assert.equal(r.saved.storageFolder, "健康记录");
+    r = await run("zh-CN", []);
+    assert.equal(r.folder, "健康记录");
+    assert.equal(r.saved.storageFolder, "健康记录", "首次加载就存下来，之后换语言不再漂移");
+    r = await run("en", [], async () => { throw new Error("io"); });
+    assert.equal(r.saved, null, "读失败不能拿默认值覆盖 data.json");
+  });
+
   console.log("通过 " + passed + " 项，失败 " + failures.length + " 项");
   if (failures.length) process.exitCode = 1;
 })();
