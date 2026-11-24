@@ -1074,8 +1074,10 @@ function typeNameIn(name, lang) {
   return names ? names[lang] || name : name;
 }
 
+/** 界面上的类型名；译名撞上自建同名类型时显示原名，两个按钮才分得开 */
 function typeLabel(name) {
-  return typeNameIn(name, I18N_LANG);
+  const label = typeNameIn(name, I18N_LANG);
+  return label !== name && Object.prototype.hasOwnProperty.call(TYPE_MAP, label) ? name : label;
 }
 
 /** 矩阵表头那种窄格子用的简称 */

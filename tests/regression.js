@@ -784,6 +784,8 @@ function sampleFile(body) {
       assert.equal(T.parseRecordLine(line).type, "睡眠");
       assert.equal(T.formatRecordLine({ type: "水", time: "08:20" }, "en"), "- Water | 08:20");
       assert.equal(T.parseRecordLine("- Sleep | 08:20").type, "Sleep", "自建的 Sleep 仍归自建");
+      assert.equal(await inLang("en", () => S.typeLabel("睡眠")), "睡眠", "界面上也和自建 Sleep 分开");
+      assert.equal(await inLang("en", () => S.typeLabel("水")), "Water");
     });
   });
 
