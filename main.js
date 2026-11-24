@@ -1368,6 +1368,17 @@ function sanitizeNote(raw) {
   return String(raw || "").replace(/\|/g, "｜").trim();
 }
 
+/**
+ * 撤销时在当天记录里找刚写的那行：同内容的多行里优先挑插件自己写法的那行（手写的 8:20 之类留着），
+ * 再取最靠后的一行（新写的总在同时刻已有行之后）
+ */
+function pickUndoMatch(records, srcText) {
+  const same = records.filter((r) => !r.unregistered && formatRecordLine(r) === srcText);
+  const written = same.filter((r) => FILE_LANGS.some((l) => formatRecordLine(r, l) === r.srcText));
+  const pool = written.length ? written : same;
+  return pool.length ? pool[pool.length - 1] : null;
+}
+
 /** lang 给了就按该语言写内置类型名（写盘）；不给就用注册名，作行的身份比对 */
 function formatRecordLine(record, lang) {
   let type = record.type;
@@ -4705,7 +4716,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     try {
       await this.manager.addRecord(Object.assign({ date: formatDate(new Date()) }, record));
       this._lastWrite = { date: formatDate(new Date()), srcText: formatRecordLine(record), type };
-      new import_obsidian.Notice(`${type} ${record.time}`);
+      new import_obsidian.Notice(`${typeLabel(type)} ${record.time}`);
       this.refreshAllViews();
     } catch (e) {
       console.error(LOG + "记录失败:", e);
@@ -4801,7 +4812,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     }
     try {
       const records = await this.manager.loadRange(last.date, last.date);
-      const match = records.find((r) => !r.unregistered && formatRecordLine(r) === last.srcText);
+      const match = pickUndoMatch(records, last.srcText);
       if (!match) throw new Error(tr("notice.undoGone"));
       await this.manager.removeRecord(match);
       this._lastWrite = null;

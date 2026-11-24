@@ -787,6 +787,17 @@ function sampleFile(body) {
     });
   });
 
+  await test("撤销挑插件写的那行，不误删同内容的手写旧行", async () => {
+    const recs = [
+      { type: "水", time: "08:20", note: "", srcText: "- 水 | 8:20", srcLine: 3 },
+      { type: "水", time: "08:20", note: "", srcText: "- Water | 08:20", srcLine: 5 },
+      { type: "水", time: "08:20", note: "", srcText: "- 水 |08:20", srcLine: 7 }
+    ];
+    assert.equal(S.pickUndoMatch(recs, "- 水 | 08:20").srcLine, 5);
+    assert.equal(S.pickUndoMatch(recs.filter((r) => r.srcLine !== 5), "- 水 | 08:20").srcLine, 7, "都不是插件写法就取最后一行");
+    assert.equal(S.pickUndoMatch(recs, "- 水 | 09:00"), null);
+  });
+
   console.log("通过 " + passed + " 项，失败 " + failures.length + " 项");
   if (failures.length) process.exitCode = 1;
 })();
