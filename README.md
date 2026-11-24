@@ -4,7 +4,14 @@
 
 安装：Obsidian 设置 → 第三方插件 → 浏览，搜「Health Record」→ 安装启用。手动安装方式见[文末](#安装)。
 
-> **English speakers:** see the [English section](#english) below.
+## English
+
+An Obsidian plugin for logging sleep and custom habits from a sidebar view, with day / week / month reviews. All data is plain Markdown in the vault — no network access, no account.
+
+- **UI languages**: follows Obsidian's language — Simplified Chinese, Traditional Chinese, or English; anything else falls back to English. No separate setting.
+- **Data files**: new files are written in your interface language (`Health Records/Health Records 2026-10.md`, `# Health Records`, `## 2026-10-18 Sun`, `- Sleep | 23:40 | 07:10`); files in any of the three languages are always read, and records added to an existing file keep that file's language. Switching language never renames, rewrites or splits files.
+- **Usage**: ribbon icon or "Open health record" command → sidebar with Today / 7 days / 30 days tabs. One-tap counters, "I woke up" sleep logging, per-type commands, undo for the last quick record.
+- **Compatibility**: Obsidian `>= 1.11.0`, desktop and mobile. MIT license — see [LICENSE](./LICENSE).
 
 ---
 
@@ -86,17 +93,6 @@
 - 当天记录底下写过话时，文件里会分成两拨；界面上仍按时刻排，条数与图表不受影响
 - 存储目录里请只放插件自己写的记录文件。手工留下内容相似的副本时，新记录可能落到副本里；同步盘产生的 `… 1.md` 冲突副本已被排除
 - 用 OneDrive / iCloud 同步整个库时，`data.json` 也会同步；两台设备同时打开同一库可能各自多统计一次，但不丢记录
-
----
-
-## English
-
-An Obsidian plugin for logging sleep and custom habits from a sidebar view, with day / week / month reviews. All data is plain Markdown in the vault — no network access, no account.
-
-- **UI languages**: follows Obsidian's language — Simplified Chinese, Traditional Chinese, or English; anything else falls back to English. No separate setting.
-- **Data files**: new files are written in your interface language (`Health Records/Health Records 2026-10.md`, `# Health Records`, `## 2026-10-18 Sun`, `- Sleep | 23:40 | 07:10`); files in any of the three languages are always read, and records added to an existing file keep that file's language. Switching language never renames, rewrites or splits files.
-- **Usage**: ribbon icon or "Open health record" command → sidebar with Today / 7 days / 30 days tabs. One-tap counters, "I woke up" sleep logging, per-type commands, undo for the last quick record.
-- **Compatibility**: Obsidian `>= 1.11.0`, desktop and mobile. MIT license — see [LICENSE](./LICENSE).
 
 ---
 
