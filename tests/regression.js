@@ -60,7 +60,7 @@ const NAMES = [
   "applyRecordInsert", "lineIdentity", "locateRecord", "applyRecordRemove",
   "applyRecordUpdate", "defaultTypes", "setTypes", "typeMeta", "isSleepType",
   "countTypes", "sanitizeTypeName", "settingsSection", "DEFAULT_SETTINGS",
-  "FILE_LEGEND", "LEGEND_MARK", "RecordManager", "HealthRecordPlugin",
+  "RecordManager", "HealthRecordPlugin",
   "trendMetrics", "groupByDay", "countOf", "previousViewRange",
 ];
 const T = {};
@@ -70,6 +70,8 @@ for (const name of NAMES) {
   }
   T[name] = sandbox[name];
 }
+T.FILE_LEGEND = sandbox.FILE_FORMATS["zh-CN"].legend;
+T.LEGEND_MARK = sandbox.FILE_FORMATS["zh-CN"].mark;
 T.proto = sandbox.HealthRecordPlugin.prototype;
 T.RecordManagerProto = sandbox.RecordManager.prototype;
 
@@ -596,6 +598,163 @@ function sampleFile(body) {
     b.fake.handleFileChange(b.file, true);
     assert.equal(b.fake.manager.filesCache, null, "文件清单缓存清空");
     assert.deepEqual(b.refreshed, [300], "create/delete 不吃回声标记");
+  });
+
+  /* ---------------- 三语：界面文案与数据文件格式 ---------------- */
+  const S = sandbox;
+  const inLang = async (lang, fn) => {
+    S.applyLanguage(lang);
+    try { return await fn(); } finally { S.applyLanguage("zh-CN"); }
+  };
+
+  await test("resolveLanguage：zh 系分简繁，其余一律英文", () => {
+    const cases = { "zh": "zh-CN", "zh-CN": "zh-CN", "zh-cn": "zh-CN", "zh-Hans": "zh-CN", "zh-TW": "zh-TW", "zh-Hant": "zh-TW",
+      "zh-HK": "zh-TW", "zh-MO": "zh-TW", "en": "en", "en-GB": "en", "ja": "en", "de": "en", "": "en" };
+    for (const [code, want] of Object.entries(cases)) assert.equal(S.resolveLanguage(code), want, code);
+    assert.equal(S.resolveLanguage(undefined), "en");
+  });
+
+  await test("tr：缺 key 回退 zh-CN，占位替换；三语 key 齐全", async () => {
+    const zh = S.I18N["zh-CN"];
+    for (const lang of ["zh-TW", "en"]) {
+      const missing = Object.keys(zh).filter((k) => !(k in S.I18N[lang]));
+      assert.deepEqual(missing, [], lang + " 缺 key");
+    }
+    assert.equal(S.tr("types.exists", { name: "运动" }), "「运动」已经存在");
+    assert.equal(S.tr("no.such.key"), "no.such.key");
+    await inLang("en", () => {
+      assert.equal(S.tr("types.exists", { name: "Run" }), "\"Run\" already exists");
+      delete S.I18N.en["quick.title"];
+      try { assert.equal(S.tr("quick.title"), "快速记录", "en 缺 key 回退简中"); } finally { S.I18N.en["quick.title"] = "Quick log"; }
+      assert.equal(S.LOG, "Health Record: ");
+    });
+    assert.equal(S.LOG, "健康记录：");
+  });
+
+  await test("时长/日期标签跟随界面语言，简中不变", async () => {
+    assert.equal(T.formatDuration(450), "7小时30分");
+    assert.equal(T.formatMonthLabel("2026-10"), "2026年10月");
+    assert.equal(T.formatDateLabel("2026-10-18"), "10月18日");
+    await inLang("en", () => {
+      assert.equal(T.formatDuration(450), "7h 30m");
+      assert.equal(T.formatDuration(45), "45m");
+      assert.equal(T.formatMonthLabel("2026-10"), "October 2026");
+      assert.equal(T.formatDateLabel("2026-10-18"), "Oct 18");
+      assert.equal(S.weekdayName(new Date(2026, 9, 18)), "Sun");
+      assert.equal(S.typeLabel("水"), "Water");
+    });
+    await inLang("zh-TW", () => {
+      assert.equal(T.formatDuration(450), "7小時30分");
+      assert.equal(S.weekdayName(new Date(2026, 9, 18)), "週日");
+      assert.equal(S.typeLabel("如厕"), "如廁");
+    });
+  });
+
+  await test("默认文件名三语生成与互认，英文名不被当成冲突副本", async () => {
+    const want = {
+      "zh-CN": ["2026-10月健康记录.md", "2026年健康记录.md", "健康记录"],
+      "zh-TW": ["2026-10月健康記錄.md", "2026年健康記錄.md", "健康記錄"],
+      en: ["Health Records 2026-10.md", "Health Records 2026.md", "Health Records"],
+    };
+    const mgr = new T.RecordManager({}, { archivePeriod: "month", storageFolder: "x" });
+    for (const [lang, [month, year, folder]] of Object.entries(want)) {
+      assert.equal(S.recordFileNameFor("2026-10-18", "month", lang), month);
+      assert.equal(S.recordFileNameFor("2026-10-18", "year", lang), year);
+      assert.equal(S.FILE_FORMATS[lang].folder, folder);
+      assert.deepEqual({ ...S.parseRecordFileName(month) }, { period: "month", id: "2026-10", lang });
+      assert.deepEqual({ ...S.parseRecordFileName(year) }, { period: "year", id: "2026", lang });
+      for (const name of [month, year]) assert.equal(mgr.looksLikeRecordName(name), true, name);
+      await inLang(lang, () => assert.equal(mgr.recordFileName("2026-10-18"), month));
+    }
+    for (const name of ["Health Records 2026 1.md", "Health Records 2026-10 2.md", "2026-10月健康記錄 1.md"]) {
+      assert.equal(mgr.looksLikeRecordName(name), false, name);
+    }
+    assert.equal(S.parseRecordFileName("我的健康.md"), null, "自定义名不认作默认命名");
+  });
+
+  await test("新建文件按界面语言写标题与图例；三语图例都算已有说明", async () => {
+    for (const lang of ["zh-CN", "zh-TW", "en"]) {
+      const intro = await inLang(lang, () => T.fileIntro());
+      assert.ok(intro.startsWith("# " + S.FILE_FORMATS[lang].title + "\n\n> "), lang);
+      assert.equal(S.detectFileLang(intro), lang);
+      for (const other of ["zh-CN", "zh-TW", "en"]) {
+        const lines = intro.split("\n");
+        assert.equal(await inLang(other, () => T.withLegend(lines)), lines, lang + " 文件在 " + other + " 下不重复补图例");
+      }
+    }
+    assert.equal(T.fileIntro(), T.withLegend(["# 健康记录"]).join("\n") + "\n", "简中开头与旧版一致");
+    assert.ok(T.fileIntro().includes(T.LEGEND_MARK));
+  });
+
+  await test("跨语言解析：英文/繁体/简体写法都读成同一种内置类型", async () => {
+    S.setTypes([{ name: "睡眠" }, { name: "水" }, { name: "如厕" }]);
+    try {
+      const en = "# Health Records\n\n## 2026-10-18 Sun\n\n- Sleep | 23:40 | 07:10\n- Water | 08:20\n- toilet | 09:00 | ok\n";
+      const tw = "# 健康記錄\n\n## 2026-10-18 週日\n\n- 睡眠 | 23:40 | 07:10\n- 如廁 | 09:00\n";
+      for (const ui of ["zh-CN", "en"]) {
+        const a = await inLang(ui, () => T.parseRecords(en, "a.md"));
+        assert.deepEqual(a.map((r) => r.type), ["睡眠", "水", "如厕"], "en 文件 @" + ui);
+        assert.ok(a.every((r) => !r.unregistered));
+        assert.equal(a[0].wake, "07:10");
+        const b = await inLang(ui, () => T.parseRecords(tw, "b.md"));
+        assert.deepEqual(b.map((r) => r.type), ["睡眠", "如厕"], "zh-TW 文件 @" + ui);
+      }
+      assert.equal(S.detectFileLang(en), "en");
+      assert.equal(S.detectFileLang(tw), "zh-TW");
+      assert.equal(S.detectFileLang("## 2026-10-18 周日\n- 水 | 08:20\n"), "zh-CN");
+      assert.equal(S.detectFileLang("- 运动 | 08:20\n"), null, "看不出语言时交给界面语言");
+    } finally {
+      S.setTypes(T.defaultTypes());
+    }
+  });
+
+  await test("往老文件追加沿用文件自身语言，同一文件不混排", async () => {
+    const zhOld = "# 健康记录\n\n## 2026-10-17 周六\n\n- 水 | 08:20\n";
+    const out1 = await inLang("en", () => T.applyRecordInsert(zhOld, "2026-10-18", { type: "睡眠", onset: "23:40", wake: "07:10" }, "\n"));
+    const text1 = typeof out1 === "string" ? out1 : out1.content;
+    assert.ok(text1.includes("## 2026-10-18 周日\n\n- 睡眠 | 23:40 | 07:10"), "英文界面往简中文件里写简中");
+    assert.ok(!/Sleep|Water|Sun|Health Records|Format:/.test(text1), "不混进英文");
+    assert.equal((text1.match(/^> /gm) || []).length, 4, "缺图例时补的是简中图例");
+
+    const enOld = "# Health Records\n\n## 2026-10-17 Sat\n\n- Water | 08:20\n";
+    const out2 = T.applyRecordInsert(enOld, "2026-10-18", { type: "水", time: "09:00", note: "" }, "\n");
+    const text2 = typeof out2 === "string" ? out2 : out2.content;
+    assert.ok(text2.includes("## 2026-10-18 Sun\n\n- Water | 09:00"), "简中界面往英文文件里写英文");
+    assert.ok(!/周|水 \||格式：/.test(text2), "不混进中文");
+    assert.ok(text2.includes("> Format: one section per day"), "补英文图例");
+
+    const fresh = await inLang("en", () => T.applyRecordInsert(T.fileIntro("en"), "2026-10-18", { type: "水", time: "09:00", note: "" }, "\n"));
+    assert.ok((typeof fresh === "string" ? fresh : fresh.content).includes("## 2026-10-18 Sun\n\n- Water | 09:00"));
+
+    const target = T.parseRecords(enOld, "a.md")[0];
+    const upd = T.applyRecordUpdate(enOld, target, { type: "水", time: "08:30", note: "" }, "\n");
+    assert.ok((typeof upd === "string" ? upd : upd.content).includes("- Water | 08:30"), "修改也沿用文件语言");
+  });
+
+  await test("切界面语言后同一期继续写进老文件，不另起一份", async () => {
+    const existing = new Set(["健康记录/2026-10月健康记录.md"]);
+    const app = { vault: { getAbstractFileByPath: (p) => (existing.has(p) ? new TFile() : null) } };
+    const mgr = new T.RecordManager(app, { archivePeriod: "month", storageFolder: "健康记录" });
+    mgr.loadRange = async () => [];
+    assert.equal(await inLang("en", () => mgr.resolveWritePath("2026-10-18")), "健康记录/2026-10月健康记录.md");
+    assert.equal(await inLang("en", () => mgr.resolveWritePath("2026-11-02")), "健康记录/Health Records 2026-11.md", "新一期才按界面语言起名");
+    assert.equal(await mgr.resolveWritePath("2026-11-02"), "健康记录/2026-11月健康记录.md");
+    assert.equal(S.fileLangFromPath("x/Health Records 2026-11.md"), "en");
+    assert.equal(S.fileLangFromPath("x/自定义.md"), "zh-CN");
+  });
+
+  await test("全新安装按界面语言取默认目录；老设置原样保留", async () => {
+    const run = async (lang, loaded) => inLang(lang, async () => {
+      const fake = Object.create(T.proto);
+      fake.loadData = async () => loaded;
+      await fake.loadSettings();
+      return fake.settings.storageFolder;
+    });
+    assert.equal(await run("en", null), "Health Records");
+    assert.equal(await run("zh-TW", null), "健康記錄");
+    assert.equal(await run("zh-CN", null), "健康记录");
+    assert.equal(await run("en", { archivePeriod: "month" }), "健康记录", "老用户没存过目录 = 旧默认");
+    assert.equal(await run("en", { storageFolder: "我的/健康" }), "我的/健康", "自定义目录不动");
   });
 
   console.log("通过 " + passed + " 项，失败 " + failures.length + " 项");

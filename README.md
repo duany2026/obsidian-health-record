@@ -1,8 +1,8 @@
 # Health Record（健康记录）
 
-记录睡眠与自定义习惯的 Obsidian 插件：侧边栏一键记录，按日、周、月回看。数据全部写在库内的 Markdown 文件里，可以直接手工编辑，也能被其它插件读取。界面目前只有中文。
+记录睡眠与自定义习惯的 Obsidian 插件：侧边栏一键记录，按日、周、月回看。数据全部写在库内的 Markdown 文件里，可以直接手工编辑，也能被其它插件读取。界面支持简体中文、繁體中文和 English，跟随 Obsidian 的语言设置自动切换。
 
-> **English summary** — A Chinese-language Obsidian plugin for logging sleep and custom habits from a sidebar view, with day / week / month reviews. All data is stored as plain Markdown in the vault; no network access, no account, no English localization yet.
+> **English** — An Obsidian plugin for logging sleep and custom habits from a sidebar view, with day / week / month reviews. The interface is available in Simplified Chinese, Traditional Chinese and English and follows Obsidian's language setting; there is no separate language option. All data is stored as plain Markdown in the vault (no network access, no account). New files are written in your interface language — e.g. `Health Records/Health Records 2026-10.md` with `# Health Records`, `## 2026-10-18 Sun` and `- Sleep | 23:40 | 07:10` — while files written in any of the three languages are always read, and records added to an existing file keep that file's language. Switching languages never renames, rewrites or splits existing files.
 
 ## 安装
 
@@ -23,6 +23,19 @@
 ## 数据文件
 
 默认写在 `健康记录/2026-10月健康记录.md`；归档周期可在设置里改为按年（`2026年健康记录.md`）。切换只影响以后下笔的文件，已有记录仍从原文件读取。
+
+**三种语言的写法都认。** 新建文件按当前界面语言写；往已有文件里加记录时沿用这份文件自己的语言，同一份文件不会中英混排。切换 Obsidian 语言后，老文件照常读写，不改名、不重写、也不会因为换了语言另起一份同月的新文件。自己改过的目录和文件名保持不变。
+
+| | 简体中文 | 繁體中文 | English |
+| --- | --- | --- | --- |
+| 默认目录 | `健康记录` | `健康記錄` | `Health Records` |
+| 按月文件 | `2026-10月健康记录.md` | `2026-10月健康記錄.md` | `Health Records 2026-10.md` |
+| 按年文件 | `2026年健康记录.md` | `2026年健康記錄.md` | `Health Records 2026.md` |
+| 文件标题 | `# 健康记录` | `# 健康記錄` | `# Health Records` |
+| 日期分区 | `## 2026-10-18 周日` | `## 2026-10-18 週日` | `## 2026-10-18 Sun` |
+| 内置类型 | 睡眠 / 水 / 如厕 / 早餐 / 午餐 / 晚餐 / 加餐 | 睡眠 / 水 / 如廁 / 早餐 / 午餐 / 晚餐 / 加餐 | Sleep / Water / Toilet / Breakfast / Lunch / Dinner / Snack |
+
+自建类型的名字原样写入，不翻译。
 
 ```markdown
 # 健康记录
@@ -66,6 +79,16 @@
 - 用 OneDrive / iCloud 同步整个库时，`data.json` 也会同步；两台设备同时打开同一库可能各自多统计一次，但不丢记录。
 
 ## 版本记录
+
+### 0.9.0（2026-11-25）
+
+界面与记录文件支持三种语言。**中文用户的界面和文件写法都没有变化。**
+
+- 新增：界面跟随 Obsidian 语言设置显示简体中文、繁體中文或 English，不用另外设置；其它语言的 Obsidian 显示英文
+- 新增：记录文件三种语言的写法都能读；新文件按界面语言写，往老文件里追加时沿用那份文件原来的语言
+- 改进：切换语言后，本月已有的记录文件会继续写下去，不会再新建一份英文名的同月文件；自己改过的目录和文件名不受影响
+- 新装插件时，默认目录按界面语言取名（`健康记录` / `健康記錄` / `Health Records`）；已经在用的不变
+- 内部：回归测试增加到 53 项，覆盖三语读写和跨语言追加
 
 ### 0.8.3（2026-11-17）
 

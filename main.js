@@ -4,7 +4,8 @@
  * ============================================================
  *
  * 插件功能：侧边栏一键记录睡眠与自定义习惯，做今日与周/月复盘；数据写在库内的 Markdown 里
- * 版本：以 manifest.json 为准（文件头不再写死，免得每次发版都落后一截）
+ * 界面语言：简体中文（源语言）/ 繁體中文 / English，跟随 Obsidian 语言设置
+ * 版本：0.9.0（发版时与 manifest.json 一起改）
  * 作者：duany
  * 许可证：MIT（见仓库 LICENSE）
  *
@@ -77,6 +78,814 @@ var import_obsidian = require("obsidian");
 var LOG = "健康记录：";
 var VIEW_TYPE_HEALTH = "health-record-view";
 
+/**
+ * 界面文案三语词典。zh-CN 是权威源语言：先改这里，再补 zh-TW / en；
+ * zh-TW / en 缺 key 时 tr() 回退 zh-CN，绝不会显示空白。
+ * 写进笔记的格式串（文件名、标题、图例、星期、内置类型名）不在这里，见 FILE_FORMATS
+ */
+var I18N = {
+  "zh-CN": {
+    "log.prefix": "健康记录：",
+    "view.title": "健康记录",
+    "ribbon.open": "健康记录",
+    "cmd.open": "打开健康记录",
+    "cmd.recordWater": "记一杯水",
+    "cmd.recordToilet": "记一次如厕",
+    "cmd.recordBreakfast": "记早餐",
+    "cmd.recordLunch": "记午餐",
+    "cmd.recordDinner": "记晚餐",
+    "cmd.recordSnack": "记加餐",
+    "cmd.sleepOnset": "记录入睡",
+    "cmd.sleepWake": "记录起床",
+    "cmd.lastNight": "记昨晚的睡眠（补记）",
+    "cmd.undo": "撤销上一条记录",
+    "cmd.manual": "补记一条",
+    "cmd.openFile": "打开当前记录文件",
+    "hue.water": "水蓝",
+    "hue.orange": "橙",
+    "hue.purple": "紫",
+    "hue.green": "绿",
+    "hue.slate": "青灰",
+    "hue.coral": "珊瑚",
+    "hue.pink": "粉",
+    "hue.grass": "草绿",
+    "unit.min": "{m}分",
+    "unit.hour": "{h}小时",
+    "unit.hourMin": "{h}小时{m}分",
+    "unit.minShort": "分",
+    "unit.hourShort": "小时",
+    "unit.hourMinShort": "小时{m}分",
+    "date.monthLabel": "{y}年{m}月",
+    "date.dayLabel": "{m}月{d}日",
+    "metric.sleep": "睡眠",
+    "metric.count": "条数",
+    "metric.entries": "{n} 条",
+    "metric.times": "{n} 次",
+    "trend.empty": "这段时间的记录不足，画不出趋势",
+    "bars.none": "未记",
+    "bars.pendingWide": "{onset} → 未记",
+    "bars.noWake": "未记起床",
+    "bars.noSleep": "没有睡眠记录",
+    "bars.durParen": "（{d}）",
+    "panel.log": "记录",
+    "panel.list": "明细",
+    "panel.sleep": "睡眠",
+    "panel.count": "次数",
+    "panel.matrix": "计数",
+    "panel.gaps": "缺口",
+    "panel.rank": "最短",
+    "tab.today": "今日",
+    "tab.last7": "近 7 天",
+    "tab.thisWeek": "本周",
+    "tab.last30": "近 30 天",
+    "tab.thisMonth": "本月",
+    "nav.prev": "上一段",
+    "nav.next": "下一段",
+    "nav.backRecent": "回到最近",
+    "nav.backPeriod": "回到本期",
+    "render.failTitle": "读取失败",
+    "render.failSub": "请重新打开侧边栏",
+    "day.prev": "前一天",
+    "day.next": "后一天",
+    "day.backToday": "返回今天",
+    "header.makeup": "补记",
+    "ov.noYesterday": "昨日未记",
+    "ov.noBaseTitle": "昨天没有记录，无从对比",
+    "ov.vsSameTime": "与昨日同时刻相比",
+    "ov.vsFullDay": "与昨日全天相比",
+    "ov.sleep": "睡眠",
+    "ov.noPrevNight": "前晚未记",
+    "ov.vsPrevNight": "与前一晚相比",
+    "ov.records": "记录",
+    "ov.hint": "从今天记起，明天这里就能和今天比",
+    "sleep.noWakeNight": "这一晚没记起床",
+    "sleep.asleepLastNight": "昨夜已入睡",
+    "sleep.asleepTonight": "今晚已入睡",
+    "sleep.staleWarn": "只记了入睡，已经过去 {h} 小时——不再自动接起床，点「补上起床」把时刻填进去",
+    "sleep.fillWake": "补上起床",
+    "sleep.recordWake": "记录起床",
+    "sleep.edit": "修改",
+    "sleep.oddWarn": "这个时长不像真的，多半是某一头记错了",
+    "sleep.none": "尚未记录睡眠",
+    "sleep.makeupNight": "补记这一晚",
+    "sleep.hint": "睡前不用点；醒来点「我醒了」，入睡照上一晚填，不准就改",
+    "sleep.iWoke": "我醒了",
+    "night.own": "{date} 那一晚",
+    "night.borrowed": "{date} 夜里",
+    "quick.title": "快速记录",
+    "quick.undo": "撤销",
+    "quick.manage": "管理类型",
+    "quick.aria": "记录{name}（今天已 {n} 次）",
+    "quick.tooltip": "{name}：今天 {n} 次",
+    "list.title": "{date}明细",
+    "list.emptyTitle": "这一天还没有记录",
+    "list.emptySub": "上面的按钮点一下就记下来了",
+    "list.pendingWake": "{type}（待记起床）",
+    "period.dawn": "凌晨",
+    "period.morning": "上午",
+    "period.afternoon": "下午",
+    "period.evening": "晚上",
+    "list.unregistered": "类型未注册",
+    "list.locate": "在原文里定位",
+    "list.edit": "修改",
+    "list.delete": "删除",
+    "list.deleteConfirm": "再点一次确认删除",
+    "stat.avgSleep": "平均睡眠",
+    "stat.sleepDays": "记了睡眠",
+    "stat.records": "记录条数",
+    "stat.recordsVal": "{n} 条",
+    "stat.recordedDays": "有记录",
+    "stat.recordedDaysVal": "{a} / {b} 天",
+    "stat.hint": "这段时间还没有记录，记几天后这里就有图可看了",
+    "delta.days": "{n} 天",
+    "delta.entries": "{n} 条",
+    "sp.note": "最短 {min} · 最长 {max}",
+    "sp.pending": " · {n} 晚未记起床",
+    "sp.noneFull": "还没有记全的晚上",
+    "sp.title": "入睡 → 起床",
+    "cp.title": "次数",
+    "cp.summary": "平均 {avg} · 最高 {max} · {n} / {total} 天有",
+    "cp.empty": "这段时间还没有可统计的记录",
+    "week.notYet": "这一周还没到，先看本周或往回翻",
+    "mx.title": "计数",
+    "mx.noTypes": "没有在显示的类型，去今日页的「管理类型」里打开一个或新建一个",
+    "mx.note": "格子里是当天的条数",
+    "gap.wholeDay": "整天没记",
+    "gap.noWake": "未记起床",
+    "gap.unknown": "{n} 行类型不在清单里，没计入统计",
+    "gap.title": "缺口",
+    "gap.count": "{n} 处",
+    "gap.allDone": "这段时间每天都记上了",
+    "gap.fixNight": "补这一晚",
+    "month.notYet": "这个月还没到，往回翻一个月",
+    "rank.title": "最短的几晚",
+    "rank.tooFew": "记全三晚才有得排，现在只有{n}晚",
+    "rank.note": "点一行改那一晚",
+    "rank.best": "最长的几晚：",
+    "file.notFound": "找不到这份记录文件，可能刚被改名或删掉",
+    "file.openFail": "打不开记录文件：{msg}",
+    "picker.dateTitle": "选择日期",
+    "picker.today": "今天",
+    "picker.yesterday": "昨天",
+    "picker.dayBefore": "前天",
+    "picker.threeDays": "大前天",
+    "picker.prevMonth": "上一月",
+    "picker.nextMonth": "下一月",
+    "picker.timeTitle": "选择时间",
+    "picker.now": "现在",
+    "picker.hour": "时",
+    "picker.minute": "分",
+    "picker.cancel": "取消",
+    "picker.ok": "确定",
+    "edit.titleEdit": "修改记录",
+    "edit.titleNew": "补记一条",
+    "edit.type": "类型",
+    "edit.dateSleep": "日期（填入睡那晚）",
+    "edit.date": "日期",
+    "edit.onset": "入睡时间",
+    "edit.onsetPicker": "选择入睡时间",
+    "edit.onsetSuggested": "按上一晚 {onset} 填的，不准就在上面改",
+    "edit.onsetTip": "记不准就选个整点，比空着强",
+    "edit.wake": "起床时间",
+    "edit.wakePicker": "选择起床时间",
+    "edit.time": "时间",
+    "edit.timePicker": "选择时间",
+    "edit.content": "内容（可留空）",
+    "edit.note": "备注（可留空）",
+    "edit.notePh": "记一句",
+    "edit.previewEmpty": "填完入睡和起床，这里会算出这一觉多长",
+    "edit.preview": "这一觉 {d}（{onset} → {wake}）",
+    "edit.previewOdd": "——是不是有一头记错了？",
+    "edit.save": "保存",
+    "edit.cancel": "取消",
+    "err.dateFormat": "日期格式应为 YYYY-MM-DD",
+    "err.future": "未来的日子还没有可记的",
+    "err.changeDate": "修改记录不能换日期：请先删除，再补记到目标日期",
+    "err.onsetFormat": "入睡时间格式应为 HH:MM",
+    "err.wakeFormat": "起床时间格式应为 HH:MM",
+    "err.sameTime": "起床与入睡是同一时刻，请检查",
+    "err.timeFormat": "时间格式应为 HH:MM",
+    "edit.updated": "已修改",
+    "edit.recorded": "已记录",
+    "edit.saveFail": "保存失败",
+    "err.recordGone": "记录已被修改或不存在，请刷新后重试",
+    "types.title": "记录类型",
+    "types.intro": "睡眠固定记「入睡 + 起床」两个时刻，其余都是计数型。类型名就是写进 Markdown 的那一列，改名等于换一个新类型，所以只能删不能改。",
+    "types.sleepSummary": "双时刻类型 · 锁定",
+    "types.hidden": "已隐藏",
+    "types.askSummary": "记时问内容",
+    "types.countSummary": "计数类型",
+    "types.moveUp": "上移",
+    "types.moveDown": "下移",
+    "types.icon": "图标",
+    "types.iconAria": "图标 {name}",
+    "types.color": "颜色",
+    "types.show": "显示出来",
+    "types.hide": "先隐藏",
+    "types.noAsk": "不问内容",
+    "types.ask": "问内容",
+    "types.confirmDelete": "确认删除",
+    "types.delete": "删除",
+    "types.deleteNote": "再点一次「确认删除」。文件里已有的「{name}」行原样留着，只是不再被读出来统计。",
+    "types.newLabel": "新建计数类型",
+    "types.newPh": "名字，例如 运动 / 吃药",
+    "types.add": "添加",
+    "types.emptyName": "类型名为空",
+    "types.exists": "「{name}」已经存在",
+    "types.limit": "类型最多 16 个，先删掉几个再加",
+    "types.added": "已添加「{name}」，点网格里的格子即可记录",
+    "types.newNote": "名字最多 8 个字，不能含竖线。全部类型合计最多 16 个（含睡眠），加完想换图标和颜色，点它的名字展开就有。",
+    "settings.display": "显示",
+    "settings.range.name": "本周 / 本月怎么算",
+    "settings.range.desc": "动态：近 7 天、近 30 天，窗口永远以今天收尾，周一打开也是完整一周。按日历：本周从周一到周日、本月从 1 号到今天，和日历对得上。",
+    "settings.range.rolling": "动态（近 7 天 / 近 30 天）",
+    "settings.range.calendar": "按日历（本周 / 本月）",
+    "settings.storage": "归档与位置",
+    "settings.period.name": "归档周期",
+    "settings.period.desc": "切换只决定以后往哪个文件下笔，老文件原样留着、照样读得出来。",
+    "settings.period.month": "按月（{name}）",
+    "settings.period.year": "按年（{name}）",
+    "settings.root": "仓库根目录",
+    "settings.currentAuto": "（当前，第一次记录时自动创建）",
+    "settings.folder.name": "记录位置",
+    "settings.folder.desc": "记录文件放在哪个目录。按内容特征查找用右侧「重新扫描」（文件名以年份开头、里面有日期分区和记录行）；找到一处自动定位，找到多处在这里点选。换目录只决定以后往哪儿下笔，老文件原样留着。",
+    "settings.rescan": "重新扫描",
+    "settings.scanning": "扫描中…",
+    "settings.adopted": "已按扫描结果定位记录文件",
+    "settings.scanFail": "扫描失败",
+    "notice.saveFail": "设置保存失败",
+    "notice.noDotDot": "存储目录不允许包含 .. 段",
+    "notice.openViewFail": "无法打开视图，请重启 Obsidian 后重试",
+    "notice.noType": "类型不存在：{type}",
+    "notice.recordFail": "记录失败：{msg}",
+    "notice.onsetDoneTonight": "今晚的入睡已经记过了",
+    "notice.onsetDoneLastNight": "昨晚的入睡已经记过了",
+    "notice.nightComplete": "这一晚已经记全了（{onset} → {wake}），要补请用补记",
+    "notice.onset": "入睡 {onset}",
+    "notice.onsetOther": "记在 {date} 那一晚：入睡 {onset}",
+    "notice.staleFirst": "这一晚的起床一直没记，先把这一条补上",
+    "notice.sameMinute": "入睡与起床同为 {time}，先把入睡时刻改一下",
+    "notice.wake": "起床 {time}",
+    "notice.deleted": "已删除",
+    "notice.deleteFail": "删除失败",
+    "notice.nothingToUndo": "没有可撤销的记录",
+    "notice.undoGone": "该记录已被修改或删除",
+    "notice.undone": "已撤销",
+    "notice.undoFail": "撤销失败",
+    "notice.openFileFail": "打开记录文件失败：{msg}",
+    "weekday.short": "一,二,三,四,五,六,日",
+    "weekday.long": "周{w}"
+  },
+  "zh-TW": {
+    "log.prefix": "健康記錄：",
+    "view.title": "健康記錄",
+    "ribbon.open": "健康記錄",
+    "cmd.open": "開啟健康記錄",
+    "cmd.recordWater": "記一杯水",
+    "cmd.recordToilet": "記一次如廁",
+    "cmd.recordBreakfast": "記早餐",
+    "cmd.recordLunch": "記午餐",
+    "cmd.recordDinner": "記晚餐",
+    "cmd.recordSnack": "記加餐",
+    "cmd.sleepOnset": "記錄入睡",
+    "cmd.sleepWake": "記錄起床",
+    "cmd.lastNight": "記昨晚的睡眠（補記）",
+    "cmd.undo": "撤銷上一條記錄",
+    "cmd.manual": "補記一條",
+    "cmd.openFile": "開啟當前記錄檔案",
+    "hue.water": "水藍",
+    "hue.orange": "橙",
+    "hue.purple": "紫",
+    "hue.green": "綠",
+    "hue.slate": "青灰",
+    "hue.coral": "珊瑚",
+    "hue.pink": "粉",
+    "hue.grass": "草綠",
+    "unit.min": "{m}分",
+    "unit.hour": "{h}小時",
+    "unit.hourMin": "{h}小時{m}分",
+    "unit.minShort": "分",
+    "unit.hourShort": "小時",
+    "unit.hourMinShort": "小時{m}分",
+    "date.monthLabel": "{y}年{m}月",
+    "date.dayLabel": "{m}月{d}日",
+    "metric.sleep": "睡眠",
+    "metric.count": "條數",
+    "metric.entries": "{n} 條",
+    "metric.times": "{n} 次",
+    "trend.empty": "這段時間的記錄不足，畫不出趨勢",
+    "bars.none": "未記",
+    "bars.pendingWide": "{onset} → 未記",
+    "bars.noWake": "未記起床",
+    "bars.noSleep": "沒有睡眠記錄",
+    "bars.durParen": "（{d}）",
+    "panel.log": "記錄",
+    "panel.list": "明細",
+    "panel.sleep": "睡眠",
+    "panel.count": "次數",
+    "panel.matrix": "計數",
+    "panel.gaps": "缺口",
+    "panel.rank": "最短",
+    "tab.today": "今日",
+    "tab.last7": "近 7 天",
+    "tab.thisWeek": "本週",
+    "tab.last30": "近 30 天",
+    "tab.thisMonth": "本月",
+    "nav.prev": "上一段",
+    "nav.next": "下一段",
+    "nav.backRecent": "回到最近",
+    "nav.backPeriod": "回到本期",
+    "render.failTitle": "讀取失敗",
+    "render.failSub": "請重新開啟側邊欄",
+    "day.prev": "前一天",
+    "day.next": "後一天",
+    "day.backToday": "返回今天",
+    "header.makeup": "補記",
+    "ov.noYesterday": "昨日未記",
+    "ov.noBaseTitle": "昨天沒有記錄，無從對比",
+    "ov.vsSameTime": "與昨日同時刻相比",
+    "ov.vsFullDay": "與昨日全天相比",
+    "ov.sleep": "睡眠",
+    "ov.noPrevNight": "前晚未記",
+    "ov.vsPrevNight": "與前一晚相比",
+    "ov.records": "記錄",
+    "ov.hint": "從今天記起，明天這裡就能和今天比",
+    "sleep.noWakeNight": "這一晚沒記起床",
+    "sleep.asleepLastNight": "昨夜已入睡",
+    "sleep.asleepTonight": "今晚已入睡",
+    "sleep.staleWarn": "只記了入睡，已經過去 {h} 小時——不再自動接起床，點「補上起床」把時刻填進去",
+    "sleep.fillWake": "補上起床",
+    "sleep.recordWake": "記錄起床",
+    "sleep.edit": "修改",
+    "sleep.oddWarn": "這個時長不像真的，多半是某一頭記錯了",
+    "sleep.none": "尚未記錄睡眠",
+    "sleep.makeupNight": "補記這一晚",
+    "sleep.hint": "睡前不用點；醒來點「我醒了」，入睡照上一晚填，不準就改",
+    "sleep.iWoke": "我醒了",
+    "night.own": "{date} 那一晚",
+    "night.borrowed": "{date} 夜裡",
+    "quick.title": "快速記錄",
+    "quick.undo": "撤銷",
+    "quick.manage": "管理類型",
+    "quick.aria": "記錄{name}（今天已 {n} 次）",
+    "quick.tooltip": "{name}：今天 {n} 次",
+    "list.title": "{date}明細",
+    "list.emptyTitle": "這一天還沒有記錄",
+    "list.emptySub": "上面的按鈕點一下就記下來了",
+    "list.pendingWake": "{type}（待記起床）",
+    "period.dawn": "凌晨",
+    "period.morning": "上午",
+    "period.afternoon": "下午",
+    "period.evening": "晚上",
+    "list.unregistered": "類型未註冊",
+    "list.locate": "在原文裡定位",
+    "list.edit": "修改",
+    "list.delete": "刪除",
+    "list.deleteConfirm": "再點一次確認刪除",
+    "stat.avgSleep": "平均睡眠",
+    "stat.sleepDays": "記了睡眠",
+    "stat.records": "記錄條數",
+    "stat.recordsVal": "{n} 條",
+    "stat.recordedDays": "有記錄",
+    "stat.recordedDaysVal": "{a} / {b} 天",
+    "stat.hint": "這段時間還沒有記錄，記幾天後這裡就有圖可看了",
+    "delta.days": "{n} 天",
+    "delta.entries": "{n} 條",
+    "sp.note": "最短 {min} · 最長 {max}",
+    "sp.pending": " · {n} 晚未記起床",
+    "sp.noneFull": "還沒有記全的晚上",
+    "sp.title": "入睡 → 起床",
+    "cp.title": "次數",
+    "cp.summary": "平均 {avg} · 最高 {max} · {n} / {total} 天有",
+    "cp.empty": "這段時間還沒有可統計的記錄",
+    "week.notYet": "這一週還沒到，先看本週或往回翻",
+    "mx.title": "計數",
+    "mx.noTypes": "沒有在顯示的類型，去今日頁的「管理類型」裡開啟一個或新建一個",
+    "mx.note": "格子裡是當天的條數",
+    "gap.wholeDay": "整天沒記",
+    "gap.noWake": "未記起床",
+    "gap.unknown": "{n} 行類型不在清單裡，沒計入統計",
+    "gap.title": "缺口",
+    "gap.count": "{n} 處",
+    "gap.allDone": "這段時間每天都記上了",
+    "gap.fixNight": "補這一晚",
+    "month.notYet": "這個月還沒到，往回翻一個月",
+    "rank.title": "最短的幾晚",
+    "rank.tooFew": "記全三晚才有得排，現在只有{n}晚",
+    "rank.note": "點一行改那一晚",
+    "rank.best": "最長的幾晚：",
+    "file.notFound": "找不到這份記錄檔案，可能剛被改名或刪掉",
+    "file.openFail": "打不開記錄檔案：{msg}",
+    "picker.dateTitle": "選擇日期",
+    "picker.today": "今天",
+    "picker.yesterday": "昨天",
+    "picker.dayBefore": "前天",
+    "picker.threeDays": "大前天",
+    "picker.prevMonth": "上一月",
+    "picker.nextMonth": "下一月",
+    "picker.timeTitle": "選擇時間",
+    "picker.now": "現在",
+    "picker.hour": "時",
+    "picker.minute": "分",
+    "picker.cancel": "取消",
+    "picker.ok": "確定",
+    "edit.titleEdit": "修改記錄",
+    "edit.titleNew": "補記一條",
+    "edit.type": "類型",
+    "edit.dateSleep": "日期（填入睡那晚）",
+    "edit.date": "日期",
+    "edit.onset": "入睡時間",
+    "edit.onsetPicker": "選擇入睡時間",
+    "edit.onsetSuggested": "按上一晚 {onset} 填的，不準就在上面改",
+    "edit.onsetTip": "記不準就選個整點，比空著強",
+    "edit.wake": "起床時間",
+    "edit.wakePicker": "選擇起床時間",
+    "edit.time": "時間",
+    "edit.timePicker": "選擇時間",
+    "edit.content": "內容（可留空）",
+    "edit.note": "備註（可留空）",
+    "edit.notePh": "記一句",
+    "edit.previewEmpty": "填完入睡和起床，這裡會算出這一覺多長",
+    "edit.preview": "這一覺 {d}（{onset} → {wake}）",
+    "edit.previewOdd": "——是不是有一頭記錯了？",
+    "edit.save": "儲存",
+    "edit.cancel": "取消",
+    "err.dateFormat": "日期格式應為 YYYY-MM-DD",
+    "err.future": "未來的日子還沒有可記的",
+    "err.changeDate": "修改記錄不能換日期：請先刪除，再補記到目標日期",
+    "err.onsetFormat": "入睡時間格式應為 HH:MM",
+    "err.wakeFormat": "起床時間格式應為 HH:MM",
+    "err.sameTime": "起床與入睡是同一時刻，請檢查",
+    "err.timeFormat": "時間格式應為 HH:MM",
+    "edit.updated": "已修改",
+    "edit.recorded": "已記錄",
+    "edit.saveFail": "儲存失敗",
+    "err.recordGone": "記錄已被修改或不存在，請重新整理後重試",
+    "types.title": "記錄類型",
+    "types.intro": "睡眠固定記「入睡 + 起床」兩個時刻，其餘都是計數型。類型名就是寫進 Markdown 的那一列，改名等於換一個新類型，所以只能刪不能改。",
+    "types.sleepSummary": "雙時刻類型 · 鎖定",
+    "types.hidden": "已隱藏",
+    "types.askSummary": "記時問內容",
+    "types.countSummary": "計數類型",
+    "types.moveUp": "上移",
+    "types.moveDown": "下移",
+    "types.icon": "圖示",
+    "types.iconAria": "圖示 {name}",
+    "types.color": "顏色",
+    "types.show": "顯示出來",
+    "types.hide": "先隱藏",
+    "types.noAsk": "不問內容",
+    "types.ask": "問內容",
+    "types.confirmDelete": "確認刪除",
+    "types.delete": "刪除",
+    "types.deleteNote": "再點一次「確認刪除」。檔案裡已有的「{name}」行原樣留著，只是不再被讀出來統計。",
+    "types.newLabel": "新建計數類型",
+    "types.newPh": "名字，例如 運動 / 吃藥",
+    "types.add": "新增",
+    "types.emptyName": "類型名為空",
+    "types.exists": "「{name}」已經存在",
+    "types.limit": "類型最多 16 個，先刪掉幾個再加",
+    "types.added": "已新增「{name}」，點網格里的格子即可記錄",
+    "types.newNote": "名字最多 8 個字，不能含豎線。全部類型合計最多 16 個（含睡眠），加完想換圖示和顏色，點它的名字展開就有。",
+    "settings.display": "顯示",
+    "settings.range.name": "本週 / 本月怎麼算",
+    "settings.range.desc": "動態：近 7 天、近 30 天，視窗永遠以今天收尾，週一開啟也是完整一週。按日曆：本週從週一到週日、本月從 1 號到今天，和日曆對得上。",
+    "settings.range.rolling": "動態（近 7 天 / 近 30 天）",
+    "settings.range.calendar": "按日曆（本週 / 本月）",
+    "settings.storage": "歸檔與位置",
+    "settings.period.name": "歸檔週期",
+    "settings.period.desc": "切換隻決定以後往哪個檔案下筆，老檔案原樣留著、照樣讀得出來。",
+    "settings.period.month": "按月（{name}）",
+    "settings.period.year": "按年（{name}）",
+    "settings.root": "儲存庫根目錄",
+    "settings.currentAuto": "（當前，第一次記錄時自動建立）",
+    "settings.folder.name": "記錄位置",
+    "settings.folder.desc": "記錄檔案放在哪個目錄。按內容特徵查詢用右側「重新掃描」（檔名以年份開頭、裡面有日期分割槽和記錄行）；找到一處自動定位，找到多處在這裡點選。換目錄只決定以後往哪兒下筆，老檔案原樣留著。",
+    "settings.rescan": "重新掃描",
+    "settings.scanning": "掃描中…",
+    "settings.adopted": "已按掃描結果定位記錄檔案",
+    "settings.scanFail": "掃描失敗",
+    "notice.saveFail": "設定儲存失敗",
+    "notice.noDotDot": "儲存目錄不允許包含 .. 段",
+    "notice.openViewFail": "無法開啟檢視，請重啟 Obsidian 後重試",
+    "notice.noType": "類型不存在：{type}",
+    "notice.recordFail": "記錄失敗：{msg}",
+    "notice.onsetDoneTonight": "今晚的入睡已經記過了",
+    "notice.onsetDoneLastNight": "昨晚的入睡已經記過了",
+    "notice.nightComplete": "這一晚已經記全了（{onset} → {wake}），要補請用補記",
+    "notice.onset": "入睡 {onset}",
+    "notice.onsetOther": "記在 {date} 那一晚：入睡 {onset}",
+    "notice.staleFirst": "這一晚的起床一直沒記，先把這一條補上",
+    "notice.sameMinute": "入睡與起床同為 {time}，先把入睡時刻改一下",
+    "notice.wake": "起床 {time}",
+    "notice.deleted": "已刪除",
+    "notice.deleteFail": "刪除失敗",
+    "notice.nothingToUndo": "沒有可撤銷的記錄",
+    "notice.undoGone": "該記錄已被修改或刪除",
+    "notice.undone": "已撤銷",
+    "notice.undoFail": "撤銷失敗",
+    "notice.openFileFail": "開啟記錄檔案失敗：{msg}",
+    "weekday.short": "一,二,三,四,五,六,日",
+    "weekday.long": "週{w}"
+  },
+  en: {
+    "log.prefix": "Health Record: ",
+    "view.title": "Health Record",
+    "ribbon.open": "Health Record",
+    "cmd.open": "Open Health Record",
+    "cmd.recordWater": "Log a glass of water",
+    "cmd.recordToilet": "Log a toilet visit",
+    "cmd.recordBreakfast": "Log breakfast",
+    "cmd.recordLunch": "Log lunch",
+    "cmd.recordDinner": "Log dinner",
+    "cmd.recordSnack": "Log a snack",
+    "cmd.sleepOnset": "Log falling asleep",
+    "cmd.sleepWake": "Log waking up",
+    "cmd.lastNight": "Log last night's sleep (catch-up)",
+    "cmd.undo": "Undo last record",
+    "cmd.manual": "Add a past record",
+    "cmd.openFile": "Open current record file",
+    "hue.water": "Sky blue",
+    "hue.orange": "Orange",
+    "hue.purple": "Purple",
+    "hue.green": "Green",
+    "hue.slate": "Slate",
+    "hue.coral": "Coral",
+    "hue.pink": "Pink",
+    "hue.grass": "Lime",
+    "unit.min": "{m}m",
+    "unit.hour": "{h}h",
+    "unit.hourMin": "{h}h {m}m",
+    "unit.minShort": "m",
+    "unit.hourShort": "h",
+    "unit.hourMinShort": "h {m}m",
+    "date.monthLabel": "{mon} {y}",
+    "date.dayLabel": "{mon} {d}",
+    "date.months": "January,February,March,April,May,June,July,August,September,October,November,December",
+    "date.monthsShort": "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec",
+    "weekday.short": "Mon,Tue,Wed,Thu,Fri,Sat,Sun",
+    "weekday.long": "{w}",
+    "metric.sleep": "Sleep",
+    "metric.count": "Entries",
+    "metric.entries": "{n}",
+    "metric.times": "{n}×",
+    "trend.empty": "Not enough records in this range to draw a trend",
+    "bars.none": "None",
+    "bars.pendingWide": "{onset} → ?",
+    "bars.noWake": "no wake time",
+    "bars.noSleep": "No sleep logged",
+    "bars.durParen": " ({d})",
+    "panel.log": "Log",
+    "panel.list": "Details",
+    "panel.sleep": "Sleep",
+    "panel.count": "Counts",
+    "panel.matrix": "Grid",
+    "panel.gaps": "Gaps",
+    "panel.rank": "Shortest",
+    "tab.today": "Today",
+    "tab.last7": "Last 7 days",
+    "tab.thisWeek": "This week",
+    "tab.last30": "Last 30 days",
+    "tab.thisMonth": "This month",
+    "nav.prev": "Previous",
+    "nav.next": "Next",
+    "nav.backRecent": "Back to latest",
+    "nav.backPeriod": "Back to current",
+    "render.failTitle": "Failed to load",
+    "render.failSub": "Please reopen the sidebar",
+    "day.prev": "Previous day",
+    "day.next": "Next day",
+    "day.backToday": "Back to today",
+    "header.makeup": "Add past",
+    "ov.noYesterday": "None yesterday",
+    "ov.noBaseTitle": "Nothing logged yesterday to compare with",
+    "ov.vsSameTime": "Compared with yesterday at this time",
+    "ov.vsFullDay": "Compared with all of yesterday",
+    "ov.sleep": "Sleep",
+    "ov.noPrevNight": "No prior night",
+    "ov.vsPrevNight": "Compared with the night before",
+    "ov.records": "Records",
+    "ov.hint": "Start logging today and tomorrow you can compare against it here",
+    "sleep.noWakeNight": "No wake time for this night",
+    "sleep.asleepLastNight": "Asleep since last night",
+    "sleep.asleepTonight": "Asleep tonight",
+    "sleep.staleWarn": "Only bedtime was logged, {h} hours ago — it won't be paired with a wake time automatically any more. Tap \"Add wake time\" to fill it in",
+    "sleep.fillWake": "Add wake time",
+    "sleep.recordWake": "Log waking up",
+    "sleep.edit": "Edit",
+    "sleep.oddWarn": "This duration doesn't look right — one end was probably logged wrong",
+    "sleep.none": "No sleep logged yet",
+    "sleep.makeupNight": "Log this night",
+    "sleep.hint": "No need to tap at bedtime: tap \"I'm awake\" when you get up; bedtime is copied from the night before, edit it if it's off",
+    "sleep.iWoke": "I'm awake",
+    "night.own": "Night of {date}",
+    "night.borrowed": "Night of {date}",
+    "quick.title": "Quick log",
+    "quick.undo": "Undo",
+    "quick.manage": "Manage types",
+    "quick.aria": "Log {name} ({n} today)",
+    "quick.tooltip": "{name}: {n} today",
+    "list.title": "Details for {date}",
+    "list.emptyTitle": "Nothing logged for this day",
+    "list.emptySub": "Tap a button above to log something",
+    "list.pendingWake": "{type} (wake time pending)",
+    "period.dawn": "Early morning",
+    "period.morning": "Morning",
+    "period.afternoon": "Afternoon",
+    "period.evening": "Evening",
+    "list.unregistered": "Unregistered type",
+    "list.locate": "Show in file",
+    "list.edit": "Edit",
+    "list.delete": "Delete",
+    "list.deleteConfirm": "Tap again to delete",
+    "stat.avgSleep": "Avg sleep",
+    "stat.sleepDays": "Sleep logged",
+    "stat.records": "Records",
+    "stat.recordsVal": "{n}",
+    "stat.recordedDays": "Days logged",
+    "stat.recordedDaysVal": "{a} / {b} days",
+    "stat.hint": "Nothing logged in this range yet — after a few days of logging, charts will show up here",
+    "delta.days": "{n} days",
+    "delta.entries": "{n}",
+    "sp.note": "Shortest {min} · Longest {max}",
+    "sp.pending": " · {n} nights missing wake time",
+    "sp.noneFull": "No complete nights yet",
+    "sp.title": "Asleep → Awake",
+    "cp.title": "Counts",
+    "cp.summary": "Avg {avg} · Max {max} · {n} / {total} days",
+    "cp.empty": "Nothing to count in this range yet",
+    "week.notYet": "This week hasn't started yet — view the current week or go back",
+    "mx.title": "Grid",
+    "mx.noTypes": "No visible types. Turn one on or create one under \"Manage types\" on the Today tab",
+    "mx.note": "Each cell is that day's count",
+    "gap.wholeDay": "Nothing logged",
+    "gap.noWake": "No wake time",
+    "gap.unknown": "{n} lines with unlisted types, not counted",
+    "gap.title": "Gaps",
+    "gap.count": "{n}",
+    "gap.allDone": "Every day in this range has records",
+    "gap.fixNight": "Fix this night",
+    "month.notYet": "This month hasn't started yet — go back a month",
+    "rank.title": "Shortest nights",
+    "rank.tooFew": "Needs three complete nights to rank; only {n} so far",
+    "rank.note": "Tap a row to edit that night",
+    "rank.best": "Longest nights:",
+    "file.notFound": "Can't find this record file — it may have just been renamed or deleted",
+    "file.openFail": "Couldn't open the record file: {msg}",
+    "picker.dateTitle": "Pick a date",
+    "picker.today": "Today",
+    "picker.yesterday": "Yesterday",
+    "picker.dayBefore": "2 days ago",
+    "picker.threeDays": "3 days ago",
+    "picker.prevMonth": "Previous month",
+    "picker.nextMonth": "Next month",
+    "picker.timeTitle": "Pick a time",
+    "picker.now": "Now",
+    "picker.hour": "Hour",
+    "picker.minute": "Min",
+    "picker.cancel": "Cancel",
+    "picker.ok": "OK",
+    "edit.titleEdit": "Edit record",
+    "edit.titleNew": "Add a past record",
+    "edit.type": "Type",
+    "edit.dateSleep": "Date (the night you fell asleep)",
+    "edit.date": "Date",
+    "edit.onset": "Bedtime",
+    "edit.onsetPicker": "Pick bedtime",
+    "edit.onsetSuggested": "Filled in from the previous night ({onset}); change it above if it's off",
+    "edit.onsetTip": "Not sure? Pick the nearest hour — better than leaving it blank",
+    "edit.wake": "Wake time",
+    "edit.wakePicker": "Pick wake time",
+    "edit.time": "Time",
+    "edit.timePicker": "Pick a time",
+    "edit.content": "Content (optional)",
+    "edit.note": "Note (optional)",
+    "edit.notePh": "A short note",
+    "edit.previewEmpty": "Fill in bedtime and wake time to see how long you slept",
+    "edit.preview": "Slept {d} ({onset} → {wake})",
+    "edit.previewOdd": " — is one of them wrong?",
+    "edit.save": "Save",
+    "edit.cancel": "Cancel",
+    "err.dateFormat": "Date must be YYYY-MM-DD",
+    "err.future": "Can't log days in the future",
+    "err.changeDate": "You can't change the date of a record: delete it, then add it again on the right day",
+    "err.onsetFormat": "Bedtime must be HH:MM",
+    "err.wakeFormat": "Wake time must be HH:MM",
+    "err.sameTime": "Wake time equals bedtime, please check",
+    "err.timeFormat": "Time must be HH:MM",
+    "edit.updated": "Updated",
+    "edit.recorded": "Logged",
+    "edit.saveFail": "Save failed",
+    "err.recordGone": "The record was changed or no longer exists. Refresh and try again",
+    "types.title": "Record types",
+    "types.intro": "Sleep always records two times (bedtime + wake time); every other type is a counter. The type name is the column written into Markdown, so renaming would mean a new type — types can be deleted but not renamed.",
+    "types.sleepSummary": "Two-time type · locked",
+    "types.hidden": "Hidden",
+    "types.askSummary": "Asks for content",
+    "types.countSummary": "Counter type",
+    "types.moveUp": "Move up",
+    "types.moveDown": "Move down",
+    "types.icon": "Icon",
+    "types.iconAria": "Icon {name}",
+    "types.color": "Color",
+    "types.show": "Show",
+    "types.hide": "Hide",
+    "types.noAsk": "Don't ask content",
+    "types.ask": "Ask content",
+    "types.confirmDelete": "Confirm delete",
+    "types.delete": "Delete",
+    "types.deleteNote": "Tap \"Confirm delete\" again. Existing \"{name}\" lines in your files stay as they are; they just won't be counted any more.",
+    "types.newLabel": "New counter type",
+    "types.newPh": "Name, e.g. Exercise / Meds",
+    "types.add": "Add",
+    "types.emptyName": "Type name is empty",
+    "types.exists": "\"{name}\" already exists",
+    "types.limit": "At most 16 types — delete some before adding more",
+    "types.added": "Added \"{name}\" — tap its tile in the grid to log it",
+    "types.newNote": "Names: up to 8 characters, no vertical bar. Up to 16 types in total (including Sleep). To change the icon or color afterwards, tap its name to expand it.",
+    "settings.display": "Display",
+    "settings.range.name": "How \"week\" and \"month\" are counted",
+    "settings.range.desc": "Rolling: last 7 days and last 30 days, always ending today, so even on Monday you see a full week. Calendar: this week runs Monday to Sunday, this month from the 1st to today, matching your calendar.",
+    "settings.range.rolling": "Rolling (last 7 / 30 days)",
+    "settings.range.calendar": "Calendar (this week / month)",
+    "settings.storage": "Archive & location",
+    "settings.period.name": "Archive period",
+    "settings.period.desc": "Only decides which file new records go into. Old files stay as they are and are still read.",
+    "settings.period.month": "Monthly ({name})",
+    "settings.period.year": "Yearly ({name})",
+    "settings.root": "Vault root",
+    "settings.currentAuto": " (current, created on first record)",
+    "settings.folder.name": "Record location",
+    "settings.folder.desc": "Which folder holds the record files. Use \"Rescan\" on the right to find them by content (file name starts with a year or \"Health Records\", with date sections and record lines inside); one match is picked automatically, several can be chosen here. Changing folders only affects where new records go; old files stay as they are.",
+    "settings.rescan": "Rescan",
+    "settings.scanning": "Scanning…",
+    "settings.adopted": "Record files located from the scan",
+    "settings.scanFail": "Scan failed",
+    "notice.saveFail": "Failed to save settings",
+    "notice.noDotDot": "The storage folder can't contain \"..\" segments",
+    "notice.openViewFail": "Couldn't open the view. Restart Obsidian and try again",
+    "notice.noType": "Type doesn't exist: {type}",
+    "notice.recordFail": "Couldn't log: {msg}",
+    "notice.onsetDoneTonight": "Tonight's bedtime is already logged",
+    "notice.onsetDoneLastNight": "Last night's bedtime is already logged",
+    "notice.nightComplete": "This night is already complete ({onset} → {wake}); use \"Add a past record\" to change it",
+    "notice.onset": "Asleep {onset}",
+    "notice.onsetOther": "Logged on the night of {date}: asleep {onset}",
+    "notice.staleFirst": "This night never got a wake time — fill that in first",
+    "notice.sameMinute": "Bedtime and wake time are both {time}; change the bedtime first",
+    "notice.wake": "Awake {time}",
+    "notice.deleted": "Deleted",
+    "notice.deleteFail": "Delete failed",
+    "notice.nothingToUndo": "Nothing to undo",
+    "notice.undoGone": "That record was changed or deleted",
+    "notice.undone": "Undone",
+    "notice.undoFail": "Undo failed",
+    "notice.openFileFail": "Couldn't open the record file: {msg}"
+  }
+};
+
+/** 当前界面语言（onload 里 applyLanguage 定，跟随 Obsidian 设置，不另设选项） */
+var I18N_LANG = "zh-CN";
+
+/**
+ * 取词：I18N_LANG 缺该 key 时回退 zh-CN；两处都没有则返回 key 本身（便于发现漏翻）。
+ * 名字用 tr 而非 t：文件里有不少 `(t) => ...` 局部变量，单字母会被遮蔽
+ */
+function tr(key, vars) {
+  const dict = I18N[I18N_LANG] || I18N["zh-CN"];
+  let s = dict[key];
+  if (s === undefined) s = I18N["zh-CN"][key];
+  if (s === undefined) return key;
+  if (!vars) return s;
+  return s.replace(/\{(\w+)\}/g, (m0, name) => (vars[name] === undefined || vars[name] === null ? m0 : String(vars[name])));
+}
+
+/**
+ * Obsidian 语言码归一到 zh-CN / zh-TW / en：
+ * zh 系里带 hant/tw/hk/mo 的算繁体、其余简体；其它一切语言（含 en、ja、de…）用英文
+ */
+function resolveLanguage(code) {
+  if (!code || typeof code !== "string") return "en";
+  const lower = code.toLowerCase();
+  if (lower.indexOf("zh") !== 0) return "en";
+  if (/hant|tw|hk|mo/.test(lower)) return "zh-TW";
+  return "zh-CN";
+}
+
+/** 语言跟随 Obsidian（getLanguage 自 1.8.7 起有，minAppVersion 1.11.0 已覆盖；保险起见缺失时用英文） */
+function applyLanguage(code) {
+  if (code === undefined) {
+    try {
+      code = typeof import_obsidian.getLanguage === "function" ? import_obsidian.getLanguage() : "en";
+    } catch {
+      code = "en";
+    }
+  }
+  I18N_LANG = resolveLanguage(code);
+  LOG = tr("log.prefix");
+  return I18N_LANG;
+}
+
 /** 睡眠条时间轴的起点固定为 18:00：夜晚在视觉上连续，跨午夜不拆成两段 */
 var NIGHT_ORIGIN = 18 * 60;
 
@@ -125,14 +934,14 @@ function registerType(meta) {
  * 现在这一组是照着深浅两色都能看的顺序排的，用户也能在管理里自己换。
  */
 var HUE_PALETTE = [
-  { hue: 198, name: "水蓝" },
-  { hue: 32, name: "橙" },
-  { hue: 262, name: "紫" },
-  { hue: 150, name: "绿" },
-  { hue: 205, name: "青灰" },
-  { hue: 12, name: "珊瑚" },
-  { hue: 320, name: "粉" },
-  { hue: 88, name: "草绿" }
+  { hue: 198, get name() { return tr("hue.water"); } },
+  { hue: 32, get name() { return tr("hue.orange"); } },
+  { hue: 262, get name() { return tr("hue.purple"); } },
+  { hue: 150, get name() { return tr("hue.green"); } },
+  { hue: 205, get name() { return tr("hue.slate"); } },
+  { hue: 12, get name() { return tr("hue.coral"); } },
+  { hue: 320, get name() { return tr("hue.pink"); } },
+  { hue: 88, get name() { return tr("hue.grass"); } }
 ];
 
 function setTypes(list) {
@@ -176,7 +985,178 @@ function countTypes() {
   return TYPE_ORDER.filter((n) => TYPE_MAP[n].group !== "sleep");
 }
 
-var WEEKDAY_SHORT = ["一", "二", "三", "四", "五", "六", "日"];
+
+/**
+ * 写进笔记的格式串，三语各一套。
+ * - 写：新文件按界面语言；往已有文件里写按文件自己的语言（detectFileLang），同一文件不混排
+ * - 读：三套全认（文件名、标题、图例、星期、内置类型名），切换界面语言后老文件照常读写
+ * 内置类型在设置与内存里一律用简中名作 key（"睡眠""水"…），只在写盘/显示时换成对应语言
+ */
+var FILE_LANGS = ["zh-CN", "zh-TW", "en"];
+var FILE_FORMATS = {
+  "zh-CN": {
+    folder: "健康记录",
+    title: "健康记录",
+    monthFile: (id) => `${id}月健康记录.md`,
+    yearFile: (y) => `${y}年健康记录.md`,
+    weekdays: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+    legend: [
+      "> 格式：一天一节，节标题是 `## YYYY-MM-DD 周几`；节里一行一条记录，写成 `- 类型 | 时间 | 备注`。",
+      "> 睡眠的第三列是**起床时间**，不是备注；而且整条记在**入睡那晚**——`10-18` 下面的 `睡眠 | 23:40 | 07:10` 是 18 日深夜睡下、19 日早上起床。",
+      "> 其余类型的第三列是内容或备注。插件认不出的行一律原样保留、不参与改写。",
+      "> 想给某一天多写几句，用 `>` 引用块或普通段落：插件不读它、不显示它，新记录一律排在它下面，不会把那段话挪走。"
+    ],
+    mark: "格式：一天一节"
+  },
+  "zh-TW": {
+    folder: "健康記錄",
+    title: "健康記錄",
+    monthFile: (id) => `${id}月健康記錄.md`,
+    yearFile: (y) => `${y}年健康記錄.md`,
+    weekdays: ["週一", "週二", "週三", "週四", "週五", "週六", "週日"],
+    legend: [
+      "> 格式：一天一節，節標題是 `## YYYY-MM-DD 週幾`；節裡一行一筆記錄，寫成 `- 類型 | 時間 | 備註`。",
+      "> 睡眠的第三欄是**起床時間**，不是備註；而且整筆記在**入睡那晚**——`10-18` 底下的 `睡眠 | 23:40 | 07:10` 是 18 日深夜睡下、19 日早上起床。",
+      "> 其餘類型的第三欄是內容或備註。外掛認不出的行一律原樣保留、不參與改寫。",
+      "> 想給某一天多寫幾句，用 `>` 引用區塊或一般段落：外掛不讀它、不顯示它，新記錄一律排在它下面，不會把那段話挪走。"
+    ],
+    mark: "格式：一天一節"
+  },
+  en: {
+    folder: "Health Records",
+    title: "Health Records",
+    monthFile: (id) => `Health Records ${id}.md`,
+    yearFile: (y) => `Health Records ${y}.md`,
+    weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    legend: [
+      "> Format: one section per day, headed `## YYYY-MM-DD Weekday`; one record per line, written as `- Type | Time | Note`.",
+      "> For Sleep the third column is the **wake-up time**, not a note, and the whole entry goes under the **night you fell asleep** — `Sleep | 23:40 | 07:10` under `10-18` means asleep late on the 18th, up on the morning of the 19th.",
+      "> For every other type the third column is content or a note. Lines the plugin doesn't recognise are kept exactly as they are and never rewritten.",
+      "> To write more about a day, use a `>` quote or a plain paragraph: the plugin doesn't read or show it, and new records always go below it, so your text stays put."
+    ],
+    mark: "Format: one section per day"
+  }
+};
+var LEGEND_MARKS = FILE_LANGS.map((l) => FILE_FORMATS[l].mark);
+
+/** 内置类型名的三语写法；key 是设置与内存里用的简中名 */
+var BUILTIN_NAMES = {
+  "睡眠": { "zh-CN": "睡眠", "zh-TW": "睡眠", en: "Sleep" },
+  "水": { "zh-CN": "水", "zh-TW": "水", en: "Water" },
+  "如厕": { "zh-CN": "如厕", "zh-TW": "如廁", en: "Toilet" },
+  "早餐": { "zh-CN": "早餐", "zh-TW": "早餐", en: "Breakfast" },
+  "午餐": { "zh-CN": "午餐", "zh-TW": "午餐", en: "Lunch" },
+  "晚餐": { "zh-CN": "晚餐", "zh-TW": "晚餐", en: "Dinner" },
+  "加餐": { "zh-CN": "加餐", "zh-TW": "加餐", en: "Snack" }
+};
+
+/** 任一语言的内置类型写法 → 简中 key；英文不分大小写。不是内置名返回 null */
+function builtinKeyOf(name) {
+  if (typeof name !== "string" || !name) return null;
+  const lower = name.toLowerCase();
+  for (const key of Object.keys(BUILTIN_NAMES)) {
+    const names = BUILTIN_NAMES[key];
+    if (names["zh-CN"] === name || names["zh-TW"] === name || names.en.toLowerCase() === lower) return key;
+  }
+  return null;
+}
+
+/** 行里写的类型名 → 注册表里的名字：原样已登记的优先（用户自建同名类型不被抢），其次按内置名的别写认 */
+function resolveTypeName(raw) {
+  if (Object.prototype.hasOwnProperty.call(TYPE_MAP, raw)) return raw;
+  const key = builtinKeyOf(raw);
+  return key && Object.prototype.hasOwnProperty.call(TYPE_MAP, key) ? key : raw;
+}
+
+/** 类型名在某种语言里的写法：内置类型换语言，自建类型原样 */
+function typeNameIn(name, lang) {
+  const names = BUILTIN_NAMES[name];
+  return names ? names[lang] || name : name;
+}
+
+function typeLabel(name) {
+  return typeNameIn(name, I18N_LANG);
+}
+
+/** 矩阵表头那种窄格子用的简称 */
+function typeShort(name) {
+  const meta = typeMeta(name);
+  const short = (meta && meta.short) || name;
+  if (!BUILTIN_NAMES[name] || I18N_LANG === "zh-CN") return short;
+  const label = typeLabel(name);
+  return I18N_LANG === "en" ? label.slice(0, 3) : label.slice(0, short.length);
+}
+
+function recordFileNameFor(dateStr, period, lang) {
+  const f = FILE_FORMATS[lang] || FILE_FORMATS["zh-CN"];
+  return period === "year" ? f.yearFile(dateStr.slice(0, 4)) : f.monthFile(dateStr.slice(0, 7));
+}
+
+/** 认出插件默认命名的记录文件：返回 { period, id, lang }；不是默认命名（含用户自取的名字）返回 null */
+function parseRecordFileName(name) {
+  let m = name.match(/^(\d{4}-\d{2})月(健康记录|健康記錄)\.md$/);
+  if (m) return { period: "month", id: m[1], lang: m[2] === "健康记录" ? "zh-CN" : "zh-TW" };
+  m = name.match(/^(\d{4})年(健康记录|健康記錄)\.md$/);
+  if (m) return { period: "year", id: m[1], lang: m[2] === "健康记录" ? "zh-CN" : "zh-TW" };
+  m = name.match(/^Health Records (\d{4}-\d{2})\.md$/i);
+  if (m) return { period: "month", id: m[1], lang: "en" };
+  m = name.match(/^Health Records (\d{4})\.md$/i);
+  if (m) return { period: "year", id: m[1], lang: "en" };
+  return null;
+}
+
+/** 新建文件时用的语言：文件名本身带语言就跟文件名，否则跟界面 */
+function fileLangFromPath(filePath) {
+  const name = String(filePath || "").substring(String(filePath || "").lastIndexOf("/") + 1);
+  const parsed = parseRecordFileName(name);
+  return parsed ? parsed.lang : I18N_LANG;
+}
+
+/**
+ * 从已有内容推断文件语言：标题 → 图例 → 日期标题里的星期 → 内置类型名。
+ * 都看不出来（空文件、只有自建类型）返回 null，由调用方退回界面语言
+ */
+function detectFileLang(content) {
+  const lines = String(content || "").split(/\r?\n/);
+  const mask = fenceMask(lines);
+  const live = lines.filter((l, i) => !mask[i]);
+  for (const l of live) {
+    const m = l.match(/^\uFEFF?# (健康记录|健康記錄|Health Records?)\s*$/i);
+    if (m) return m[1] === "健康记录" ? "zh-CN" : m[1] === "健康記錄" ? "zh-TW" : "en";
+  }
+  for (const l of live) {
+    for (const lang of FILE_LANGS) if (l.indexOf(FILE_FORMATS[lang].mark) !== -1) return lang;
+  }
+  for (const l of live) {
+    const m = l.match(/^## \d{4}-\d{1,2}-\d{1,2}\s+(\S+)/);
+    if (!m) continue;
+    if (m[1].charAt(0) === "周") return "zh-CN";
+    if (m[1].charAt(0) === "週") return "zh-TW";
+    if (/^(mon|tue|wed|thu|fri|sat|sun)/i.test(m[1])) return "en";
+  }
+  for (const l of live) {
+    const m = l.match(/^- ([^|]+?)\s*\|/);
+    if (!m) continue;
+    const key = builtinKeyOf(m[1]);
+    if (!key) continue;
+    const names = BUILTIN_NAMES[key];
+    if (names.en.toLowerCase() === m[1].toLowerCase()) return "en";
+    if (names["zh-TW"] !== names["zh-CN"]) return m[1] === names["zh-TW"] ? "zh-TW" : "zh-CN";
+  }
+  return null;
+}
+
+function weekdayShortList() {
+  return tr("weekday.short").split(",");
+}
+
+function weekdayShort(d) {
+  return weekdayShortList()[(d.getDay() + 6) % 7];
+}
+
+function weekdayName(d) {
+  return tr("weekday.long", { w: weekdayShort(d) });
+}
 
 // ==================== 时间工具模块 ====================
 
@@ -330,9 +1310,9 @@ function formatDuration(min) {
   if (min === null || min === undefined) return "—";
   const h = Math.floor(min / 60);
   const m = min % 60;
-  if (h === 0) return `${m}分`;
-  if (m === 0) return `${h}小时`;
-  return `${h}小时${m}分`;
+  if (h === 0) return tr("unit.min", { m });
+  if (m === 0) return tr("unit.hour", { h });
+  return tr("unit.hourMin", { h, m });
 }
 
 /** 分钟数（可能超过一天）回到 HH:MM，夜晚轴上的刻度要用 */
@@ -343,12 +1323,12 @@ function minutesToClock(min) {
 
 function formatMonthLabel(monthId) {
   const parts = monthId.split("-");
-  return `${parts[0]}年${Number(parts[1])}月`;
+  return tr("date.monthLabel", { y: parts[0], m: Number(parts[1]), mon: tr("date.months").split(",")[Number(parts[1]) - 1] });
 }
 
 function formatDateLabel(dateStr) {
   const d = dateFromStr(dateStr);
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
+  return tr("date.dayLabel", { m: d.getMonth() + 1, d: d.getDate(), mon: tr("date.monthsShort").split(",")[d.getMonth()] });
 }
 
 /**
@@ -388,12 +1368,14 @@ function sanitizeNote(raw) {
   return String(raw || "").replace(/\|/g, "｜").trim();
 }
 
-function formatRecordLine(record) {
+/** lang 给了就按该语言写内置类型名（写盘）；不给就用注册名，作行的身份比对 */
+function formatRecordLine(record, lang) {
+  const type = lang ? typeNameIn(record.type, lang) : record.type;
   if (isSleepType(record.type)) {
-    return record.wake ? `- ${record.type} | ${record.onset} | ${record.wake}` : `- ${record.type} | ${record.onset} |`;
+    return record.wake ? `- ${type} | ${record.onset} | ${record.wake}` : `- ${type} | ${record.onset} |`;
   }
   const note = sanitizeNote(record.note);
-  return note ? `- ${record.type} | ${record.time} | ${note}` : `- ${record.type} | ${record.time}`;
+  return note ? `- ${type} | ${record.time} | ${note}` : `- ${type} | ${record.time}`;
 }
 
 /**
@@ -406,7 +1388,7 @@ function parseRecordLine(line) {
   if (!line.startsWith("- ")) return null;
   const parts = line.slice(2).split("|").map((p) => p.trim());
   if (parts.length < 2 || parts.length > 3) return null;
-  const type = parts[0];
+  const type = resolveTypeName(parts[0]);
   if (!isKnownType(type)) return null;
 
   if (isSleepType(type)) {
@@ -591,19 +1573,14 @@ function lineSortKey(line) {
  * （新建分区放文末会让补记把文件搞成乱序，手改时找不到北）
  */
 /** 文件顶部的格式说明：半年后打开、或者整份丢给 AI，不看插件也能明白这些行是什么 */
-var FILE_LEGEND = [
-  "> 格式：一天一节，节标题是 `## YYYY-MM-DD 周几`；节里一行一条记录，写成 `- 类型 | 时间 | 备注`。",
-  "> 睡眠的第三列是**起床时间**，不是备注；而且整条记在**入睡那晚**——`10-18` 下面的 `睡眠 | 23:40 | 07:10` 是 18 日深夜睡下、19 日早上起床。",
-  "> 其余类型的第三列是内容或备注。插件认不出的行一律原样保留、不参与改写。",
-  "> 想给某一天多写几句，用 `>` 引用块或普通段落：插件不读它、不显示它，新记录一律排在它下面，不会把那段话挪走。"
-];
-var LEGEND_MARK = "格式：一天一节";
 
 /** 缺说明就补在标题下面。拿说明自己的文本当哨兵：补过一次就不会再补第二遍 */
-function withLegend(lines) {
+function withLegend(lines, lang) {
   const mask = fenceMask(lines);
-  // 哨兵只认围栏外的行：用户把文件头这段说明抄进代码块示例时，真说明不能因此被跳过
-  if (lines.some((l, i) => !mask[i] && l.indexOf(LEGEND_MARK) !== -1)) return lines;
+  // 哨兵只认围栏外的行：用户把文件头这段说明抄进代码块示例时，真说明不能因此被跳过。
+  // 三种语言的说明都算：切了界面语言，老文件不会被补上第二份
+  if (lines.some((l, i) => !mask[i] && LEGEND_MARKS.some((mark) => l.indexOf(mark) !== -1))) return lines;
+  const fmt = FILE_FORMATS[lang] || FILE_FORMATS[detectFileLang(lines.join("\n")) || I18N_LANG] || FILE_FORMATS["zh-CN"];
   // 围栏里的 `## 2026-10-05` 和 `# 标题` 是抄来的示例，不是文件的结构，
   // 照着它们定位会把说明插进别人的代码块里
   const firstDay = lines.findIndex((l, i) => !mask[i] && matchDayHeader(l) !== null);
@@ -623,24 +1600,26 @@ function withLegend(lines) {
       const fm = lines.slice(0, fmEnd + 1);
       const afterFm = lines.slice(fmEnd + 1);
       while (afterFm.length && afterFm[0].trim() === "") afterFm.shift();
-      return [...fm, "", "# 健康记录", "", ...FILE_LEGEND, "", ...afterFm];
+      return [...fm, "", "# " + fmt.title, "", ...fmt.legend, "", ...afterFm];
     }
     // 属性区没有闭合行：无法确定边界，照旧当普通文件处理，别冒险插错
   }
   // 没有标题的文件（手工新建的、或者刚创建的）连标题一起补，别多留一行空行
-  const head = h1 === -1 ? ["# 健康记录"] : lines.slice(0, h1 + 1);
-  return [...head, "", ...FILE_LEGEND, "", ...body];
+  const head = h1 === -1 ? ["# " + fmt.title] : lines.slice(0, h1 + 1);
+  return [...head, "", ...fmt.legend, "", ...body];
 }
 
 /** 新建文件时的开头：标题 + 格式说明，一次写全 */
-function fileIntro() {
-  return withLegend(["# 健康记录"]).join("\n") + "\n";
+function fileIntro(lang) {
+  const fmt = FILE_FORMATS[lang] || FILE_FORMATS[I18N_LANG] || FILE_FORMATS["zh-CN"];
+  return withLegend(["# " + fmt.title], lang || I18N_LANG).join("\n") + "\n";
 }
 
 /** 日期分区标题带上星期：翻文件的人和接手处理的 AI 都不用再换算日子 */
-function dayHeaderLine(dateStr) {
+function dayHeaderLine(dateStr, lang) {
   const d = dateFromStr(dateStr);
-  return `## ${dateStr} 周${WEEKDAY_SHORT[(d.getDay() + 6) % 7]}`;
+  const fmt = FILE_FORMATS[lang] || FILE_FORMATS["zh-CN"];
+  return `## ${dateStr} ${fmt.weekdays[(d.getDay() + 6) % 7]}`;
 }
 
 /** 一节的正文末尾：最后一行有内容的地方（围栏里的行不算），新记录往这里追加 */
@@ -653,9 +1632,11 @@ function sectionTail(lines, section, mask) {
 }
 
 function applyRecordInsert(content, dateStr, record, eol) {
-  let lines = withLegend(content.split(/\r?\n/));
+  // 文件已有内容看得出语言就沿用，同一文件不混排；新文件/看不出来才跟界面
+  const lang = detectFileLang(content) || I18N_LANG;
+  let lines = withLegend(content.split(/\r?\n/), lang);
   const mask = fenceMask(lines);
-  const lineText = formatRecordLine(record);
+  const lineText = formatRecordLine(record, lang);
   const section = findSection(lines, dateStr, mask);
 
   if (section) {
@@ -704,7 +1685,7 @@ function applyRecordInsert(content, dateStr, record, eol) {
         break;
       }
     }
-    const block = [dayHeaderLine(dateStr), "", lineText];
+    const block = [dayHeaderLine(dateStr, lang), "", lineText];
     if (beforeIdx === -1) {
       while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
       // 文件末尾还开着一个没闭合的围栏：新的一天不能写进围栏里——读侧不认围栏内的行，
@@ -766,7 +1747,7 @@ function applyRecordRemove(content, target, eol) {
   const lines = content.split(/\r?\n/);
   const mask = fenceMask(lines);
   const idx = locateRecord(lines, target, mask);
-  if (idx === -1) throw new Error("记录已被修改或不存在，请刷新后重试");
+  if (idx === -1) throw new Error(tr("err.recordGone"));
   lines.splice(idx, 1);
   return lines.join(eol);
 }
@@ -775,8 +1756,8 @@ function applyRecordUpdate(content, target, nextRecord, eol) {
   const lines = content.split(/\r?\n/);
   const mask = fenceMask(lines);
   const idx = locateRecord(lines, target, mask);
-  if (idx === -1) throw new Error("记录已被修改或不存在，请刷新后重试");
-  lines[idx] = formatRecordLine(nextRecord);
+  if (idx === -1) throw new Error(tr("err.recordGone"));
+  lines[idx] = formatRecordLine(nextRecord, detectFileLang(content) || I18N_LANG);
   return lines.join(eol);
 }
 
@@ -825,9 +1806,7 @@ var RecordManager = class {
 
   /** 归档方式由设置决定：按月是 `2026-10月健康记录.md`，按年是 `2026年健康记录.md` */
   recordFileName(dateStr) {
-    return this.settings.archivePeriod === "year"
-      ? `${dateStr.slice(0, 4)}年健康记录.md`
-      : `${dateStr.slice(0, 7)}月健康记录.md`;
+    return recordFileNameFor(dateStr, this.settings.archivePeriod, I18N_LANG);
   }
 
   buildPath(name) {
@@ -840,8 +1819,10 @@ var RecordManager = class {
     // 同步盘的冲突副本（`2026-10月健康记录 1.md`）不认：它按定义就是同一份的复制，
     // 读进来只会让同一天的同一行在两处出现——去重时谁排前面算谁，
     // 于是新记录被写进那份没人看的副本里，删一条还有另一条站起来
+    // 英文默认名 `Health Records 2026.md` 自己就以" 数字.md"收尾，先放行，再挡它的冲突副本
+    if (parseRecordFileName(name)) return true;
     if (/ \d+\.md$/.test(name)) return false;
-    return /^\d{4}/.test(name) && name.endsWith(".md");
+    return /^(?:\d{4}|Health Records \d{4})/i.test(name) && name.endsWith(".md");
   }
 
   async looksLikeRecordFile(file) {
@@ -884,7 +1865,13 @@ var RecordManager = class {
     const records = await this.loadRange(dateStr, dateStr);
     if (records.some((r) => r.filePath === canonical)) return canonical;
     const home = records.find((r) => r.filePath);
-    return home ? home.filePath : canonical;
+    if (home) return home.filePath;
+    // 这一天还没记过：同一期已有别的语言命名的文件（切界面语言之前建的）就接着写它，不另起一份
+    for (const lang of [I18N_LANG, ...FILE_LANGS]) {
+      const path = this.buildPath(recordFileNameFor(dateStr, this.settings.archivePeriod, lang));
+      if (this.app.vault.getAbstractFileByPath(path) instanceof import_obsidian.TFile) return path;
+    }
+    return canonical;
   }
 
   async ensureDirectory(dirPath) {
@@ -946,7 +1933,7 @@ var RecordManager = class {
 
   /** 真正的读改写：vault.process 原子接口优先，老版本回落 read/modify；换行按文件自身风格回写 */
   async writeFile(filePath, mutateFn) {
-    const ensured = await this.ensureFile(filePath, fileIntro());
+    const ensured = await this.ensureFile(filePath, fileIntro(fileLangFromPath(filePath)));
     const file = ensured.file;
     let result;
     try {
@@ -1194,7 +2181,7 @@ function svgEl(parent, tag, attrs) {
  */
 var TREND_METRICS = [
   {
-    key: "sleep", label: "睡眠", chart: "bar",
+    key: "sleep", get label() { return tr("metric.sleep"); }, chart: "bar",
     // 读数用整分钟：以前换算成"小时保留一位小数"，顶部统计写 5小时59分、
     // 图下面写 6小时0分，同一周的两个平均数对不上
     valueOf(day) {
@@ -1205,9 +2192,9 @@ var TREND_METRICS = [
   },
   {
     // 条数要把睡眠也算进去：补记一晚睡眠同样是"记了一条"
-    key: "count", label: "条数", chart: "line",
+    key: "count", get label() { return tr("metric.count"); }, chart: "line",
     valueOf(day) { return day && day.total + day.sleeps.length ? day.total + day.sleeps.length : null; },
-    format(v) { return v === null ? "—" : v + " 条"; }
+    format(v) { return v === null ? "—" : tr("metric.entries", { n: v }); }
   }
 ];
 
@@ -1218,10 +2205,10 @@ function trendMetrics() {
     out.push({
       key: "type:" + type,
       // 芯片上写全名：缩写只有矩阵表头那种一格 40 像素宽的地方才不得不用
-      label: (typeMeta(type) || {}).name || type,
+      label: typeLabel(type),
       chart: "line",
       valueOf(day) { const n = countOf(day, type); return n ? n : null; },
-      format(v) { return v === null ? "—" : v + " 次"; }
+      format(v) { return v === null ? "—" : tr("metric.times", { n: v }); }
     });
   }
   return out;
@@ -1253,7 +2240,7 @@ function renderTrend(host, days, opts) {
   // 折线要两个点才连得起来；柱子一天有一根就画得成
   if (present.length < (asBar ? 1 : 2)) {
     const tip = svgEl(svg, "text", { x: width / 2, y: height / 2, class: "hr-trend-empty", "text-anchor": "middle" });
-    tip.textContent = "这段时间的记录不足，画不出趋势";
+    tip.textContent = tr("trend.empty");
     return svg;
   }
 
@@ -1394,7 +2381,7 @@ function renderSleepBars(host, days, opts) {
     const d = dateFromStr(r.date);
     const row = wrap.createDiv({ cls: "hr-tl-row" });
     if (r.date === todayStr) row.addClass("is-today");
-    row.createSpan({ cls: "hr-tl-day", text: wide ? WEEKDAY_SHORT[(d.getDay() + 6) % 7] : String(d.getDate()) });
+    row.createSpan({ cls: "hr-tl-day", text: wide ? weekdayShort(d) : String(d.getDate()) });
     const track = row.createDiv({ cls: "hr-tl-track" });
     if (r.geo) {
       const bar = track.createDiv({ cls: "hr-tl-bar" + (r.geo.pending ? " is-pending" : "") });
@@ -1406,12 +2393,12 @@ function renderSleepBars(host, days, opts) {
     }
     const min = r.sleep ? sleepDuration(r.sleep.onset, r.sleep.wake) : null;
     const text = !r.sleep
-      ? "未记"
+      ? tr("bars.none")
       : min === null
-        ? (wide ? `${r.sleep.onset} → 未记` : r.sleep.onset)
+        ? (wide ? tr("bars.pendingWide", { onset: r.sleep.onset }) : r.sleep.onset)
         : wide ? `${r.sleep.onset} → ${r.sleep.wake}` : formatDuration(min);
     row.createSpan({ cls: "hr-tl-val" + (r.sleep ? "" : " is-off"), text });
-    row.setAttribute("title", `${formatDateLabel(r.date)} ${r.sleep ? `${r.sleep.onset} → ${r.sleep.wake || "未记起床"}${min === null ? "" : `（${formatDuration(min)}）`}` : "没有睡眠记录"}`);
+    row.setAttribute("title", `${formatDateLabel(r.date)} ${r.sleep ? `${r.sleep.onset} → ${r.sleep.wake || tr("bars.noWake")}${min === null ? "" : tr("bars.durParen", { d: formatDuration(min) })}` : tr("bars.noSleep")}`);
     // 条上直接改这一晚：折线上的点只是数据，这里的每一行本来就是一条记录
     row.addEventListener("click", () => opts.onPickRow(r.date, r.sleep));
   }
@@ -1426,9 +2413,9 @@ function renderSleepBars(host, days, opts) {
  * 面板撑满剩余高度——图也因此终于有了能看清的高度。
  */
 var PANELS = {
-  today: [["log", "记录"], ["list", "明细"]],
-  week: [["sleep", "睡眠"], ["count", "次数"], ["matrix", "计数"], ["gaps", "缺口"]],
-  month: [["sleep", "睡眠"], ["count", "次数"], ["rank", "最短"]]
+  today: [["log", "panel.log"], ["list", "panel.list"]],
+  week: [["sleep", "panel.sleep"], ["count", "panel.count"], ["matrix", "panel.matrix"], ["gaps", "panel.gaps"]],
+  month: [["sleep", "panel.sleep"], ["count", "panel.count"], ["rank", "panel.rank"]]
 };
 
 var HealthRecordView = class extends import_obsidian.ItemView {
@@ -1451,7 +2438,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
   }
 
   getDisplayText() {
-    return "健康记录";
+    return tr("view.title");
   }
 
   getIcon() {
@@ -1564,7 +2551,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     this.segEl.removeClass("hr-hidden");
     const active = this.currentPanel();
     for (const [key, label] of defs) {
-      const btn = this.segEl.createEl("button", { cls: "hr-seg-btn" + (key === active ? " is-on" : ""), text: label });
+      const btn = this.segEl.createEl("button", { cls: "hr-seg-btn" + (key === active ? " is-on" : ""), text: tr(label) });
       btn.addEventListener("click", () => {
         if (key === active) return;
         this.setPanel(key);
@@ -1576,7 +2563,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
   buildTabs() {
     this.tabsEl.empty();
     const rolling = this.rolling();
-    const defs = [["today", "今日"], ["week", rolling ? "近 7 天" : "本周"], ["month", rolling ? "近 30 天" : "本月"]];
+    const defs = [["today", tr("tab.today")], ["week", rolling ? tr("tab.last7") : tr("tab.thisWeek")], ["month", rolling ? tr("tab.last30") : tr("tab.thisMonth")]];
     for (const [key, label] of defs) {
       const btn = this.tabsEl.createEl("button", { cls: "hr-tab", text: label });
       if (key === this.tab) btn.addClass("is-active");
@@ -1608,7 +2595,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     this.navEl.removeClass("hr-hidden");
     const pill = this.navEl.createDiv({ cls: "hr-nav-pill" });
     const mk = (icon, delta) => {
-      const btn = pill.createEl("button", { cls: "hr-nav-btn", attr: { "aria-label": delta < 0 ? "上一段" : "下一段" } });
+      const btn = pill.createEl("button", { cls: "hr-nav-btn", attr: { "aria-label": delta < 0 ? tr("nav.prev") : tr("nav.next") } });
       paintIcon(btn, icon, "chevron");
       btn.addEventListener("click", () => {
         this.anchor = this.rolling()
@@ -1623,7 +2610,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const label = pill.createSpan({ cls: "hr-nav-label" });
     mk("chevron-right", 1);
     if (!this.isCurrentPeriod()) {
-      const back = this.navEl.createEl("button", { cls: "hr-text-btn is-small", text: this.rolling() ? "回到最近" : "回到本期" });
+      const back = this.navEl.createEl("button", { cls: "hr-text-btn is-small", text: this.rolling() ? tr("nav.backRecent") : tr("nav.backPeriod") });
       back.addEventListener("click", () => {
         this.anchor = new Date();
         this.date = formatDate(new Date());
@@ -1711,8 +2698,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       console.error(LOG + "视图渲染失败:", e);
       this.bodyEl.empty();
       const err = this.bodyEl.createDiv({ cls: "hr-empty" });
-      err.createDiv({ cls: "hr-empty-title", text: "读取失败" });
-      err.createDiv({ cls: "hr-empty-sub", text: e && e.message ? e.message : "请重新打开侧边栏" });
+      err.createDiv({ cls: "hr-empty-title", text: tr("render.failTitle") });
+      err.createDiv({ cls: "hr-empty-sub", text: e && e.message ? e.message : tr("render.failSub") });
     } finally {
       this.rendering = false;
       if (this.pendingRefresh) {
@@ -1770,16 +2757,16 @@ var HealthRecordView = class extends import_obsidian.ItemView {
         });
         return btn;
       };
-      mkDayNav("chevron-left", "前一天", -1);
+      mkDayNav("chevron-left", tr("day.prev"), -1);
       const title = this.headerMeta.createSpan({ cls: "hr-title" });
       title.createSpan({ text: formatDateLabel(this.date) });
       // 窄栏里"周几"最先该被挤掉，日期本身比它有用
-      title.createSpan({ cls: "hr-title-week", text: ` 周${WEEKDAY_SHORT[(d.getDay() + 6) % 7]}` });
-      const next = mkDayNav("chevron-right", "后一天", 1);
+      title.createSpan({ cls: "hr-title-week", text: " " + weekdayName(d) });
+      const next = mkDayNav("chevron-right", tr("day.next"), 1);
       // 未来的日子不列：翻到今天就把"后一天"禁掉，而不是让点了没反应
       if (this.date >= today) next.disabled = true;
       if (this.date !== today) {
-        const back = this.headerMeta.createEl("button", { cls: "hr-back-today", text: "返回今天" });
+        const back = this.headerMeta.createEl("button", { cls: "hr-back-today", text: tr("day.backToday") });
         back.addEventListener("click", () => {
           this.date = today;
           void this.render();
@@ -1791,7 +2778,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const more = this.headerActions.createEl("button", { cls: "hr-text-btn" });
     const moreIcon = more.createSpan({ cls: "hr-text-btn-icon" });
     paintIcon(moreIcon, "pen-line", "pencil");
-    more.createSpan({ text: "补记" });
+    more.createSpan({ text: tr("header.makeup") });
     // 预填"看到的那一天"。按日历切法下 range.end 是周日 / 月末，直接拿来预填
     // 等于先给用户塞一个未来的日子，保存再被"未来的日子还没有可记的"挡回去
     more.addEventListener("click", () => {
@@ -1834,11 +2821,11 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const line = item.createDiv({ cls: "hr-today-line" });
       line.createSpan({ cls: "hr-today-value", text: String(value) });
       if (o.noBase) {
-        line.createSpan({ cls: "hr-today-delta is-none", text: o.noBaseText || "昨日未记" });
+        line.createSpan({ cls: "hr-today-delta is-none", text: o.noBaseText || tr("ov.noYesterday") });
       } else if (deltaText) {
         line.createSpan({ cls: "hr-today-delta" + (o.sleep ? " is-sleep" : ""), text: deltaText });
       }
-      item.setAttribute("title", o.title || (o.noBase ? "昨天没有记录，无从对比" : "与昨日" + (isToday ? "同时刻" : "全天") + "相比"));
+      item.setAttribute("title", o.title || (o.noBase ? tr("ov.noBaseTitle") : isToday ? tr("ov.vsSameTime") : tr("ov.vsFullDay")));
     };
     // 睡眠 chip：跟记录页大卡同一晚（resolveNight），和前一晚记全的觉比；
     // 没记全就不占格（待记起床的状态大卡已经说了，这里不重复）。锚定按入睡时刻值匹配，
@@ -1856,8 +2843,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const prevSleep = prevNightObj ? primarySleep(prevNightObj) : null;
       const prevMin = prevSleep && prevSleep.wake ? sleepDuration(prevSleep.onset, prevSleep.wake) : null;
       const d = prevMin === null || min === null ? null : min - prevMin;
-      mk("睡眠", formatDuration(min), d ? (d > 0 ? "↑" : "↓") + formatDuration(Math.abs(d)) : null,
-        { sleep: true, noBase: prevMin === null, noBaseText: "前晚未记", title: "与前一晚相比" });
+      mk(tr("ov.sleep"), formatDuration(min), d ? (d > 0 ? "↑" : "↓") + formatDuration(Math.abs(d)) : null,
+        { sleep: true, noBase: prevMin === null, noBaseText: tr("ov.noPrevNight"), title: tr("ov.vsPrevNight") });
     }
     for (const type of this.plugin.visibleTypes()) {
       const n = countOf(day, type);
@@ -1865,7 +2852,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       if (prevList === null) { mk(type, n, null, { noBase: true }); continue; }
       const p = isToday ? sameTimeCount(prevList, nowMin) : prevList.length;
       const d = n - p;
-      mk(type, n, d ? (d > 0 ? "↑" : "↓") + Math.abs(d) : null, {});
+      mk(typeLabel(type), n, d ? (d > 0 ? "↑" : "↓") + Math.abs(d) : null, {});
     }
     let prevTotal = null;
     if (prevDay) {
@@ -1874,7 +2861,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
         : prevDay.total;
     }
     const dTotal = prevTotal === null ? null : day.total - prevTotal;
-    mk("记录", day.total, dTotal ? (dTotal > 0 ? "↑" : "↓") + Math.abs(dTotal) : null, { noBase: prevTotal === null });
+    mk(tr("ov.records"), day.total, dTotal ? (dTotal > 0 ? "↑" : "↓") + Math.abs(dTotal) : null, { noBase: prevTotal === null });
     // 手机横滑条：右边还有格子被挡住、或已经滚过去了，边缘渐隐一下才看得出来
     const updFade = () => {
       const over = strip.scrollWidth - strip.clientWidth;
@@ -1885,7 +2872,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     window.requestAnimationFrame(updFade);
     // 刚开始记还没攒出可比的昨天：整排灰字看着像坏了，给一行实话
     if (isToday && day.total === 0 && (!prevDay || (prevDay.total === 0 && prevDay.sleeps.length === 0))) {
-      host.createDiv({ cls: "hr-today-hint", text: "从今天记起，明天这里就能和今天比" });
+      host.createDiv({ cls: "hr-today-hint", text: tr("ov.hint") });
     }
   }
 
@@ -1921,41 +2908,41 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const stalePending = !!(night && night.pending && staleHours > PENDING_MAX_HOURS);
     if (night && night.pending) {
       valueEl.createSpan({ text: night.record.onset });
-      unitEl.setText(stalePending ? "这一晚没记起床" : night.borrowed ? "昨夜已入睡" : "今晚已入睡");
+      unitEl.setText(stalePending ? tr("sleep.noWakeNight") : night.borrowed ? tr("sleep.asleepLastNight") : tr("sleep.asleepTonight"));
       if (stalePending) {
-        notes.push({ cls: "hr-sleep-warn", text: `只记了入睡，已经过去 ${staleHours} 小时——不再自动接起床，点「补上起床」把时刻填进去` });
-        headActs.push({ icon: "pen-line", label: "补上起床", run: () => this.openEditor({ existing: night.record }), cls: "hr-btn-primary" });
+        notes.push({ cls: "hr-sleep-warn", text: tr("sleep.staleWarn", { h: staleHours }) });
+        headActs.push({ icon: "pen-line", label: tr("sleep.fillWake"), run: () => this.openEditor({ existing: night.record }), cls: "hr-btn-primary" });
       } else {
         // 只有一下要点、也没有时刻要摆，就别硬撑第二行：「记录起床」直接守在右上角
-        headActs.push({ icon: "bed-double", label: "记录起床", run: () => this.plugin.recordWake(), cls: "hr-btn-primary" });
+        headActs.push({ icon: "bed-double", label: tr("sleep.recordWake"), run: () => this.plugin.recordWake(), cls: "hr-btn-primary" });
       }
     } else if (night) {
       const min = sleepDuration(night.record.onset, night.record.wake);
       const h = Math.floor(min / 60);
       const m = min % 60;
       valueEl.createSpan({ text: h === 0 ? String(m) : String(h) });
-      valueEl.createSpan({ cls: "hr-sleep-value-sub", text: h === 0 ? "分" : m ? `小时${m}分` : "小时" });
+      valueEl.createSpan({ cls: "hr-sleep-value-sub", text: h === 0 ? tr("unit.minShort") : m ? tr("unit.hourMinShort", { m }) : tr("unit.hourShort") });
       unitEl.setText(night.label);
       // 两个时刻合成一枚"19:00 → 03:20"：分着写两枚芯片，加上动作，一屏就吃掉五分之一
       chip = `${night.record.onset} → ${night.record.wake}`;
-      headActs.push({ icon: "pen-line", label: "修改", run: () => this.openEditor({ existing: night.record }), cls: "hr-btn-inline" });
+      headActs.push({ icon: "pen-line", label: tr("sleep.edit"), run: () => this.openEditor({ existing: night.record }), cls: "hr-btn-inline" });
       if (min > 840 || min < 90) {
-        notes.push({ cls: "hr-sleep-warn", text: "这个时长不像真的，多半是某一头记错了" });
+        notes.push({ cls: "hr-sleep-warn", text: tr("sleep.oddWarn") });
       }
       // 睡前那一记撤了。他两轮都说"很少有人睡着时还打开手机点一下"，
       // 留着它反而在凌晨 2 点给出一个没有意义、还会把前一段顶掉的按钮。
       // 「记录入睡」还在命令面板里，真要用的人仍然调得到
     } else if (!isToday) {
       valueEl.createSpan({ text: "—" });
-      unitEl.setText("尚未记录睡眠");
-      headActs.push({ icon: "pen-line", label: "补记这一晚", run: () => this.openEditor({ type: T_SLEEP, date: this.date }), cls: "hr-btn-primary" });
+      unitEl.setText(tr("sleep.none"));
+      headActs.push({ icon: "pen-line", label: tr("sleep.makeupNight"), run: () => this.openEditor({ type: T_SLEEP, date: this.date }), cls: "hr-btn-primary" });
     } else {
       valueEl.createSpan({ text: "—" });
-      unitEl.setText("尚未记录睡眠");
+      unitEl.setText(tr("sleep.none"));
       // 早上唯一该做的动作：醒来点一下，起床取现在、入睡照上一晚填（弹窗里还标着这个数是猜的），
       // 不准就在同一个弹窗里改——不再要求任何人在睡前点手机
-      hint = "睡前不用点；醒来点「我醒了」，入睡照上一晚填，不准就改";
-      headActs.push({ icon: "sunrise", label: "我醒了", run: () => void this.plugin.openSleepMakeup(), cls: "hr-btn-primary" });
+      hint = tr("sleep.hint");
+      headActs.push({ icon: "sunrise", label: tr("sleep.iWoke"), run: () => void this.plugin.openSleepMakeup(), cls: "hr-btn-primary" });
     }
 
     for (const n of notes) main.createDiv({ cls: n.cls, text: n.text });
@@ -1982,7 +2969,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
   resolveNight(day, contextByDay) {
     const latest = (list) => (list.length ? list.slice().sort((a, b) => (a.onset < b.onset ? -1 : 1)).pop() : null);
     const own = latest(day.sleeps);
-    if (own) return { record: own, label: `${formatDateLabel(day.date)} 那一晚`, borrowed: false, pending: !own.wake };
+    if (own) return { record: own, label: tr("night.own", { date: formatDateLabel(day.date) }), borrowed: false, pending: !own.wake };
     // 今天这一页只往前借一晚：再往前借就会把"前天那一觉"顶在早上第一屏，
     // 而昨晚还没记这件事反而没地方点（他 10-21 早上要记的正是昨晚）。
     // 翻旧日子的页面仍借三天——那是回看，不是录入
@@ -1991,7 +2978,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const key = formatDate(addDays(dateFromStr(day.date), -back));
       const prev = contextByDay.get(key);
       const sleep = prev ? primarySleep(prev) : null;
-      if (sleep) return { record: sleep, label: `${formatDateLabel(key)} 夜里`, borrowed: true, pending: !sleep.wake };
+      if (sleep) return { record: sleep, label: tr("night.borrowed", { date: formatDateLabel(key) }), borrowed: true, pending: !sleep.wake };
     }
     return null;
   }
@@ -2012,15 +2999,15 @@ var HealthRecordView = class extends import_obsidian.ItemView {
   renderQuickGrid(day, host) {
     const section = (host || this.bodyEl).createDiv({ cls: "hr-section" });
     const head = section.createDiv({ cls: "hr-section-head" });
-    head.createSpan({ cls: "hr-section-title", text: "快速记录" });
+    head.createSpan({ cls: "hr-section-title", text: tr("quick.title") });
     const acts = head.createDiv({ cls: "hr-section-acts" });
     // 撤销跟进：撤销栈只管本会话刚记的那一条，所以只在真有一笔可撤时出现；
     // 手机上命令面板太深，手滑多点的第一时间就该在手边
     if (this.plugin._lastWrite) {
-      const undo = acts.createEl("button", { cls: "hr-quiet-btn", text: "撤销" });
+      const undo = acts.createEl("button", { cls: "hr-quiet-btn", text: tr("quick.undo") });
       undo.addEventListener("click", () => void this.plugin.undoLast());
     }
-    const manage = acts.createEl("button", { cls: "hr-quiet-btn", text: "管理类型" });
+    const manage = acts.createEl("button", { cls: "hr-quiet-btn", text: tr("quick.manage") });
     manage.addEventListener("click", () => new TypeManagerModal(this.app, this.plugin).open());
 
     const grid = section.createDiv({ cls: "hr-quick-grid" });
@@ -2030,7 +3017,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       btn.style.setProperty("--hue", String(meta.hue));
       const iconEl = btn.createSpan({ cls: "hr-quick-icon" });
       paintIcon(iconEl, meta.icon, "circle");
-      btn.createSpan({ cls: "hr-quick-label", text: meta.name });
+      btn.createSpan({ cls: "hr-quick-label", text: typeLabel(meta.name) });
       const count = countOf(day, type);
       // 0.8.0：色深之外补回数字角标——"记了几次"一眼可读（总览条之外的第二落点）
       if (count) {
@@ -2047,15 +3034,15 @@ var HealthRecordView = class extends import_obsidian.ItemView {
           window.setTimeout(() => btn.removeClass("hr-quick-flash"), 420);
         }
       });
-      btn.setAttribute("aria-label", `记录${meta.name}（今天已 ${count} 次）`);
-      btn.title = `${meta.name}：今天 ${count} 次`;
+      btn.setAttribute("aria-label", tr("quick.aria", { name: typeLabel(meta.name), n: count }));
+      btn.title = tr("quick.tooltip", { name: typeLabel(meta.name), n: count });
     }
   }
 
   renderDayList(day, host) {
     const section = (host || this.bodyEl).createDiv({ cls: "hr-section" });
     const head = section.createDiv({ cls: "hr-section-head" });
-    head.createSpan({ cls: "hr-section-title", text: `${formatDateLabel(day.date)}明细` });
+    head.createSpan({ cls: "hr-section-title", text: tr("list.title", { date: formatDateLabel(day.date) }) });
     const total = day.total + day.sleeps.length;
     head.createSpan({ cls: "hr-section-count", text: String(total) });
 
@@ -2067,17 +3054,17 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const empty = section.createDiv({ cls: "hr-empty" });
       const icon = empty.createDiv({ cls: "hr-empty-icon" });
       paintIcon(icon, "sparkles", "star");
-      empty.createDiv({ cls: "hr-empty-title", text: "这一天还没有记录" });
-      empty.createDiv({ cls: "hr-empty-sub", text: "上面的按钮点一下就记下来了" });
+      empty.createDiv({ cls: "hr-empty-title", text: tr("list.emptyTitle") });
+      empty.createDiv({ cls: "hr-empty-sub", text: tr("list.emptySub") });
       return;
     }
 
     const rows = [];
     for (const rec of day.sleeps) {
-      rows.push({ time: rec.onset, text: rec.wake ? `${rec.type} → ${rec.wake}` : `${rec.type}（待记起床）`, rec });
+      rows.push({ time: rec.onset, text: rec.wake ? `${typeLabel(rec.type)} → ${rec.wake}` : tr("list.pendingWake", { type: typeLabel(rec.type) }), rec });
     }
     for (const rec of countRecords(day)) {
-      rows.push({ time: rec.time, text: rec.type + (rec.note ? ` · ${rec.note}` : ""), rec });
+      rows.push({ time: rec.time, text: typeLabel(rec.type) + (rec.note ? ` · ${rec.note}` : ""), rec });
     }
     for (const rec of day.unknown || []) {
       // 认得这是一行记录，只是类型不在清单里：列出来、标出来，别让它悄悄消失
@@ -2090,10 +3077,10 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const periodOf = (t) => {
       const m = timeToMinutes(t);
       if (m === null) return null;
-      if (m < 300) return "凌晨";
-      if (m < 720) return "上午";
-      if (m < 1080) return "下午";
-      return "晚上";
+      if (m < 300) return tr("period.dawn");
+      if (m < 720) return tr("period.morning");
+      if (m < 1080) return tr("period.afternoon");
+      return tr("period.evening");
     };
     let lastPeriod = null;
     for (const row of rows) {
@@ -2109,16 +3096,16 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const iconEl = item.createSpan({ cls: "hr-item-icon" });
       paintIcon(iconEl, meta.icon, "circle");
       item.createSpan({ cls: "hr-item-text", text: row.text });
-      if (row.unknown) item.createSpan({ cls: "hr-item-tag", text: "类型未注册" });
+      if (row.unknown) item.createSpan({ cls: "hr-item-tag", text: tr("list.unregistered") });
       // 定位到原文：明细里能改一句备注、能删一条，但真要写一大段（今天为什么只睡了
       // 四小时、药饭后有没有不舒服），那是文件里那个引用块的活，得把人送到那一行
-      const jump = item.createDiv({ cls: "hr-item-btn", attr: { "aria-label": "在原文里定位" } });
+      const jump = item.createDiv({ cls: "hr-item-btn", attr: { "aria-label": tr("list.locate") } });
       paintIcon(jump, "external-link", "arrow-up-right");
       jump.addEventListener("click", (e) => {
         e.stopPropagation();
         this.openInFile(row.rec);
       });
-      const edit = item.createDiv({ cls: "hr-item-btn", attr: { "aria-label": "修改" } });
+      const edit = item.createDiv({ cls: "hr-item-btn", attr: { "aria-label": tr("list.edit") } });
       paintIcon(edit, "pen-line", "pencil");
       edit.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2126,7 +3113,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       });
       // 删除要按两次：第一下只把垃圾桶染红，第二下才真删。
       // 撤销栈只管刚记的，删错了找不回来（这是清单里唯一不可逆的动作）
-      const del = item.createDiv({ cls: "hr-item-btn hr-item-del", attr: { "aria-label": "删除" } });
+      const del = item.createDiv({ cls: "hr-item-btn hr-item-del", attr: { "aria-label": tr("list.delete") } });
       paintIcon(del, "trash-2", "x");
       let armed = false;
       let disarmTimer = 0;
@@ -2135,12 +3122,12 @@ var HealthRecordView = class extends import_obsidian.ItemView {
         if (!armed) {
           armed = true;
           del.addClass("is-armed");
-          del.setAttribute("aria-label", "再点一次确认删除");
+          del.setAttribute("aria-label", tr("list.deleteConfirm"));
           item.addClass("is-arming");
           disarmTimer = window.setTimeout(() => {
             armed = false;
             del.removeClass("is-armed");
-            del.setAttribute("aria-label", "删除");
+            del.setAttribute("aria-label", tr("list.delete"));
             item.removeClass("is-arming");
           }, 3000);
           return;
@@ -2197,12 +3184,12 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const dSleep = prev && prev.sleepAvg !== null && sleepAvg !== null ? sleepAvg - prev.sleepAvg : null;
     const dTotal = prev && prev.hasAny ? recordTotal - prev.recordTotal : null;
     const dDays = prev && prev.hasAny ? recordedDays - prev.recordedDays : null;
-    this.statCell(this.statsEl, "平均睡眠", durations.length ? formatDuration(sleepAvg) : "—", this.formatStatDelta(dSleep, "dur"), "is-sleep");
-    this.statCell(this.statsEl, "记了睡眠", `${sleepDays} / ${days.length}`, this.formatStatDelta(dDays, "day"));
-    this.statCell(this.statsEl, "记录条数", `${recordTotal} 条`, this.formatStatDelta(dTotal, "num"));
-    this.statCell(this.statsEl, "有记录", `${recordedDays} / ${days.length} 天`);
+    this.statCell(this.statsEl, tr("stat.avgSleep"), durations.length ? formatDuration(sleepAvg) : "—", this.formatStatDelta(dSleep, "dur"), "is-sleep");
+    this.statCell(this.statsEl, tr("stat.sleepDays"), `${sleepDays} / ${days.length}`, this.formatStatDelta(dDays, "day"));
+    this.statCell(this.statsEl, tr("stat.records"), tr("stat.recordsVal", { n: recordTotal }), this.formatStatDelta(dTotal, "num"));
+    this.statCell(this.statsEl, tr("stat.recordedDays"), tr("stat.recordedDaysVal", { a: recordedDays, b: days.length }));
     // 0.8.0：整窗没数据的一行实话，免得四个"—"加空图像坏了
-    if (!recordTotal) this.statsEl.createDiv({ cls: "hr-stat-hint", text: "这段时间还没有记录，记几天后这里就有图可看了" });
+    if (!recordTotal) this.statsEl.createDiv({ cls: "hr-stat-hint", text: tr("stat.hint") });
   }
 
   collectRangeMetrics(days) {
@@ -2228,8 +3215,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const sign = v > 0 ? "↑ " : "↓ ";
     const abs = Math.abs(v);
     if (kind === "dur") return sign + formatDuration(abs);
-    if (kind === "day") return sign + abs + " 天";
-    return sign + abs + " 条";
+    if (kind === "day") return sign + tr("delta.days", { n: abs });
+    return sign + tr("delta.entries", { n: abs });
   }
 
   panelHead(host, title, note) {
@@ -2251,9 +3238,9 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       else vals.push(min);
     }
     const note = vals.length
-      ? `最短 ${formatDuration(Math.min(...vals))} · 最长 ${formatDuration(Math.max(...vals))}${pending ? ` · ${pending} 晚未记起床` : ""}`
-      : "还没有记全的晚上";
-    this.panelHead(host, "入睡 → 起床", note);
+      ? tr("sp.note", { min: formatDuration(Math.min(...vals)), max: formatDuration(Math.max(...vals)) }) + (pending ? tr("sp.pending", { n: pending }) : "")
+      : tr("sp.noneFull");
+    this.panelHead(host, tr("sp.title"), note);
     // 一个月三十行时倒着排：刚记的那一晚在顶上。按日历或近 7 天时保持从旧到新，
     // 那一屏本来就一眼看完，顺序反过来反而看不出走势
     const shown = days.length > 7 ? days.slice().reverse() : days;
@@ -2276,7 +3263,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       metric = metrics[0];
       this.trendMetric = metric.key;
     }
-    const head = this.panelHead(host, "次数", "");
+    const head = this.panelHead(host, tr("cp.title"), "");
     const chips = head.createDiv({ cls: "hr-chips" });
     for (const one of metrics) {
       const chip = chips.createEl("button", {
@@ -2305,8 +3292,8 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     host.createDiv({
       cls: "hr-panel-note",
       text: values.length
-        ? `平均 ${metric.format(Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10)} · 最高 ${metric.format(Math.max(...values))} · ${values.length} / ${days.length} 天有`
-        : "这段时间还没有可统计的记录"
+        ? tr("cp.summary", { avg: metric.format(Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10), max: metric.format(Math.max(...values)), n: values.length, total: days.length })
+        : tr("cp.empty")
     });
   }
 
@@ -2316,7 +3303,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const days = this.daysInRange(range, byDay);
     if (!days.length) {
       this.segEl.addClass("hr-hidden");
-      this.bodyEl.createDiv({ cls: "hr-card hr-page-empty", text: "这一周还没到，先看本周或往回翻" });
+      this.bodyEl.createDiv({ cls: "hr-card hr-page-empty", text: tr("week.notYet") });
       return;
     }
     this.renderRangeStats(days, prevDays);
@@ -2332,11 +3319,11 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const types = this.plugin.visibleTypes();
     const host = this.bodyEl.createDiv({ cls: "hr-panel" });
     if (!types.length) {
-      this.panelHead(host, "计数", "");
-      host.createDiv({ cls: "hr-empty-sub", text: "没有在显示的类型，去今日页的「管理类型」里打开一个或新建一个" });
+      this.panelHead(host, tr("mx.title"), "");
+      host.createDiv({ cls: "hr-empty-sub", text: tr("mx.noTypes") });
       return;
     }
-    this.panelHead(host, "计数", "格子里是当天的条数");
+    this.panelHead(host, tr("mx.title"), tr("mx.note"));
 
     const grid = host.createDiv({ cls: "hr-matrix" });
     grid.style.setProperty("--hr-cols", String(types.length));
@@ -2349,7 +3336,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const meta = typeMeta(type) || { hue: 210 };
       const cell = headRow.createSpan({ cls: "hr-mx-head-cell" });
       cell.style.setProperty("--hue", String(meta.hue));
-      cell.createSpan({ cls: "hr-mx-head-text", text: (typeMeta(type) || { short: type }).short || type });
+      cell.createSpan({ cls: "hr-mx-head-text", text: typeShort(type) });
       cell.setAttribute("title", type);
     }
 
@@ -2365,7 +3352,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const d = dateFromStr(entry.date);
       const isToday = entry.date === formatDate(new Date());
       const row = grid.createDiv({ cls: "hr-mx-row" + (isToday ? " is-today" : "") });
-      row.createSpan({ cls: "hr-mx-label", text: WEEKDAY_SHORT[(d.getDay() + 6) % 7] });
+      row.createSpan({ cls: "hr-mx-label", text: weekdayShort(d) });
       for (const type of types) {
         const n = countOf(entry.day, type);
         const cell = row.createSpan({ cls: "hr-mx-cell" + (n ? "" : " is-zero"), text: n ? String(n) : "·" });
@@ -2385,18 +3372,18 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const gaps = [];
     for (const entry of days) {
       if (!entry.day) {
-        gaps.push({ date: entry.date, text: "整天没记" });
+        gaps.push({ date: entry.date, text: tr("gap.wholeDay") });
         continue;
       }
       const sleep = primarySleep(entry.day);
-      if (sleep && !sleep.wake) gaps.push({ date: entry.date, text: "未记起床", sleep });
+      if (sleep && !sleep.wake) gaps.push({ date: entry.date, text: tr("gap.noWake"), sleep });
       const n = (entry.day.unknown || []).length;
-      if (n) gaps.push({ date: entry.date, text: `${n} 行类型不在清单里，没计入统计` });
+      if (n) gaps.push({ date: entry.date, text: tr("gap.unknown", { n }), unknown: true });
     }
     const host = this.bodyEl.createDiv({ cls: "hr-panel" });
-    this.panelHead(host, "缺口", gaps.length ? `${gaps.length} 处` : "");
+    this.panelHead(host, tr("gap.title"), gaps.length ? tr("gap.count", { n: gaps.length }) : "");
     if (!gaps.length) {
-      host.createDiv({ cls: "hr-empty-sub", text: "这段时间每天都记上了" });
+      host.createDiv({ cls: "hr-empty-sub", text: tr("gap.allDone") });
       return;
     }
     const list = host.createDiv({ cls: "hr-list" });
@@ -2406,10 +3393,10 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       const item = list.createDiv({ cls: "hr-item is-gap" });
       item.createSpan({ cls: "hr-item-time", text: formatDateLabel(gap.date) });
       item.createSpan({ cls: "hr-item-text", text: gap.text });
-      if (!gap.sleep && /类型不在清单里/.test(gap.text)) {
+      if (!gap.sleep && gap.unknown) {
         item.addClass("is-unknown");
       } else {
-        const edit = item.createDiv({ cls: "hr-item-btn", attr: { "aria-label": "补这一晚" } });
+        const edit = item.createDiv({ cls: "hr-item-btn", attr: { "aria-label": tr("gap.fixNight") } });
         paintIcon(edit, "pen-line", "pencil");
         edit.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -2426,7 +3413,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
     const days = this.daysInRange(range, byDay);
     if (!days.length) {
       this.segEl.addClass("hr-hidden");
-      this.bodyEl.createDiv({ cls: "hr-card hr-page-empty", text: "这个月还没到，往回翻一个月" });
+      this.bodyEl.createDiv({ cls: "hr-card hr-page-empty", text: tr("month.notYet") });
       return;
     }
     this.renderRangeStats(days, prevDays);
@@ -2448,15 +3435,15 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       list.push({ date, min, sleep });
     }
     if (list.length < 3) {
-      this.panelHead(host, "最短的几晚", "");
-      host.createDiv({ cls: "hr-empty-sub", text: "记全三晚才有得排，现在只有" + list.length + "晚" });
+      this.panelHead(host, tr("rank.title"), "");
+      host.createDiv({ cls: "hr-empty-sub", text: tr("rank.tooFew", { n: list.length }) });
       return;
     }
     list.sort((a, b) => a.min - b.min);
     const worst = list.slice(0, 3);
     const best = list.slice(-2).reverse();
 
-    this.panelHead(host, "最短的几晚", "点一行改那一晚");
+    this.panelHead(host, tr("rank.title"), tr("rank.note"));
     const rows = host.createDiv({ cls: "hr-rank" });
     for (const item of worst) {
       const row = rows.createDiv({ cls: "hr-rank-row" });
@@ -2466,7 +3453,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       row.addEventListener("click", () => this.openEditor({ existing: item.sleep }));
     }
     const bestRow = host.createDiv({ cls: "hr-rank-best" });
-    bestRow.createSpan({ cls: "hr-section-hint", text: "最长的几晚：" });
+    bestRow.createSpan({ cls: "hr-section-hint", text: tr("rank.best") });
     for (const item of best) bestRow.createSpan({ cls: "hr-rank-pill", text: `${formatDateLabel(item.date)} ${formatDuration(item.min)}` });
   }
 
@@ -2491,7 +3478,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
       // 文件刚被改名或删掉：那份"哪些文件算记录文件"的清单立刻作废，
       // 别让下一次点击继续拿着旧路径找
       this.plugin.manager.filesCache = null;
-      new import_obsidian.Notice(LOG + "找不到这份记录文件，可能刚被改名或删掉");
+      new import_obsidian.Notice(LOG + tr("file.notFound"));
       return;
     }
     const leaf = this.app.workspace.getLeaf(false);
@@ -2502,7 +3489,7 @@ var HealthRecordView = class extends import_obsidian.ItemView {
        （实测反馈：跳转按钮应该跳转到这一条所在位置，而不是只跳转到文档开头）。
        OpenViewState.eState 是官方入口，一步到位；文件本来就在这一格里打开着也照样落行 */
     void Promise.resolve(leaf.openFile(file, { eState: { line: record.srcLine } }))
-      .catch((e) => new import_obsidian.Notice(LOG + "打不开记录文件：" + (e && e.message ? e.message : String(e))));
+      .catch((e) => new import_obsidian.Notice(LOG + tr("file.openFail", { msg: e && e.message ? e.message : String(e) })));
   }
 };
 
@@ -2525,11 +3512,11 @@ var DatePickerModal = class extends import_obsidian.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("hr-picker");
-    contentEl.createEl("h2", { text: "选择日期", cls: "hr-modal-title" });
+    contentEl.createEl("h2", { text: tr("picker.dateTitle"), cls: "hr-modal-title" });
 
     const quick = contentEl.createDiv({ cls: "hr-pick-quick" });
     const today = new Date();
-    for (const [label, back] of [["今天", 0], ["昨天", 1], ["前天", 2], ["大前天", 3]]) {
+    for (const [label, back] of [[tr("picker.today"), 0], [tr("picker.yesterday"), 1], [tr("picker.dayBefore"), 2], [tr("picker.threeDays"), 3]]) {
       const target = formatDate(addDays(today, -back));
       const btn = quick.createEl("button", { cls: "hr-pick-quick-btn" + (target === this.value ? " is-on" : ""), text: label });
       btn.addEventListener("click", () => this.choose(target));
@@ -2544,14 +3531,14 @@ var DatePickerModal = class extends import_obsidian.Modal {
     const year = this.shown.getFullYear();
     const month = this.shown.getMonth();
     this.navEl.empty();
-    const prev = this.navEl.createEl("button", { cls: "hr-pick-arrow", attr: { "aria-label": "上一月" } });
+    const prev = this.navEl.createEl("button", { cls: "hr-pick-arrow", attr: { "aria-label": tr("picker.prevMonth") } });
     paintIcon(prev, "chevron-left", "chevron");
     prev.addEventListener("click", () => {
       this.shown = new Date(year, month - 1, 1);
       this.paint();
     });
-    this.navEl.createSpan({ cls: "hr-pick-title", text: `${year}年${month + 1}月` });
-    const next = this.navEl.createEl("button", { cls: "hr-pick-arrow", attr: { "aria-label": "下一月" } });
+    this.navEl.createSpan({ cls: "hr-pick-title", text: formatMonthLabel(`${year}-${pad2(month + 1)}`) });
+    const next = this.navEl.createEl("button", { cls: "hr-pick-arrow", attr: { "aria-label": tr("picker.nextMonth") } });
     paintIcon(next, "chevron-right", "chevron");
     next.addEventListener("click", () => {
       this.shown = new Date(year, month + 1, 1);
@@ -2559,7 +3546,7 @@ var DatePickerModal = class extends import_obsidian.Modal {
     });
 
     this.gridEl.empty();
-    for (const w of WEEKDAY_SHORT) this.gridEl.createDiv({ cls: "hr-pick-week", text: w });
+    for (const w of weekdayShortList()) this.gridEl.createDiv({ cls: "hr-pick-week", text: w });
     const first = (new Date(year, month, 1).getDay() + 6) % 7;
     for (let i = 0; i < first; i++) this.gridEl.createDiv({ cls: "hr-pick-cell is-blank" });
     const total = daysInMonth(year, month);
@@ -2608,7 +3595,7 @@ var TimePickerModal = class extends import_obsidian.Modal {
   constructor(app, opts) {
     super(app);
     this.onPick = opts.onPick;
-    this.titleText = opts.title || "选择时间";
+    this.titleText = opts.title || tr("picker.timeTitle");
     this.itemH = 40;
     // 手打来的值未必落在格子上（07:47），也未必补齐了位（9:5）。这里宽松地读进来
     // 只为了摆初始值——弹窗绝不"顺手改掉"用户已经打好的那一串，改了才叫事故
@@ -2630,7 +3617,7 @@ var TimePickerModal = class extends import_obsidian.Modal {
     // 标题行：左边是标题，右边是「现在」
     const head = contentEl.createDiv({ cls: "hr-pick-head" });
     head.createEl("h2", { text: this.titleText, cls: "hr-modal-title" });
-    const nowBtn = head.createEl("button", { cls: "hr-pick-now", text: "现在", attr: { type: "button" } });
+    const nowBtn = head.createEl("button", { cls: "hr-pick-now", text: tr("picker.now"), attr: { type: "button" } });
     nowBtn.addEventListener("click", () => {
       const now = new Date();
       this.hour = now.getHours();
@@ -2645,11 +3632,11 @@ var TimePickerModal = class extends import_obsidian.Modal {
     // 时/分两列拨轮：上下滑，选中那行落在中间那条带里。
     // 上一版是 6 列数字格，一屏三十六个目标，他说"不喜欢这种格子选择"
     const wheels = contentEl.createDiv({ cls: "hr-time-wheels" });
-    this.hourWheel = this.buildWheel(wheels, "时", HOURS, (v) => {
+    this.hourWheel = this.buildWheel(wheels, tr("picker.hour"), HOURS, (v) => {
       this.hour = v;
       this.paint();
     });
-    this.minWheel = this.buildWheel(wheels, "分", MINUTES, (v) => {
+    this.minWheel = this.buildWheel(wheels, tr("picker.minute"), MINUTES, (v) => {
       this.minute = v;
       this.paint();
     });
@@ -2658,9 +3645,9 @@ var TimePickerModal = class extends import_obsidian.Modal {
     this.minCells = this.minWheel.items;
 
     const btns = contentEl.createDiv({ cls: "hr-modal-btns is-even" });
-    btns.createEl("button", { cls: "hr-btn hr-btn-ghost", text: "取消", attr: { type: "button" } })
+    btns.createEl("button", { cls: "hr-btn hr-btn-ghost", text: tr("picker.cancel"), attr: { type: "button" } })
       .addEventListener("click", () => this.close());
-    btns.createEl("button", { cls: "hr-btn hr-btn-primary", text: "确定", attr: { type: "button" } })
+    btns.createEl("button", { cls: "hr-btn hr-btn-primary", text: tr("picker.ok"), attr: { type: "button" } })
       .addEventListener("click", () => this.confirm());
 
     this.paint();
@@ -2751,12 +3738,12 @@ var RecordEditModal = class extends import_obsidian.Modal {
     const existing = this.opts.existing;
     const { contentEl } = this;
     contentEl.addClass("hr-modal");
-    contentEl.createEl("h2", { text: existing ? "修改记录" : "补记一条", cls: "hr-modal-title" });
+    contentEl.createEl("h2", { text: existing ? tr("edit.titleEdit") : tr("edit.titleNew"), cls: "hr-modal-title" });
 
     const form = contentEl.createDiv({ cls: "hr-form" });
 
     const typeRow = form.createDiv({ cls: "hr-field" });
-    typeRow.createDiv({ cls: "hr-field-label", text: "类型" });
+    typeRow.createDiv({ cls: "hr-field-label", text: tr("edit.type") });
     const chips = typeRow.createDiv({ cls: "hr-chip-row" });
     // 补记的默认类型取第一个"在显示"的计数型。以前写死"水"：把水隐藏或删掉之后，
     // 从页头点「补记」仍然默认选中水，保存就写出一条未注册行——不计统计、看着像丢了
@@ -2779,12 +3766,12 @@ var RecordEditModal = class extends import_obsidian.Modal {
       }
     };
 
-    const dateField = this.makeField(form, "日期（填入睡那晚）", "text", "YYYY-MM-DD", existing ? existing.date : this.opts.date);
-    this.attachPicker(dateField, { kind: "date", title: "选择日期" });
-    const onsetField = this.makeField(form, "入睡时间", "text", "23:40", existing && isSleepType(existing.type) ? existing.onset : (this.opts.onset || ""));
+    const dateField = this.makeField(form, tr("edit.dateSleep"), "text", "YYYY-MM-DD", existing ? existing.date : this.opts.date);
+    this.attachPicker(dateField, { kind: "date", title: tr("picker.dateTitle") });
+    const onsetField = this.makeField(form, tr("edit.onset"), "text", "23:40", existing && isSleepType(existing.type) ? existing.onset : (this.opts.onset || ""));
     this.attachPicker(onsetField, {
       kind: "time",
-      title: "选择入睡时间",
+      title: tr("edit.onsetPicker"),
       onPick: (time) => this.snapDateForOnset(dateField, time, !!existing)
     });
     // 手打这条路以前绕过日期判定：同样填 02:00，点选择器会落到前一晚，手打却留在当天。
@@ -2798,16 +3785,16 @@ var RecordEditModal = class extends import_obsidian.Modal {
     onsetField.wrap.createDiv({
       cls: "hr-field-note",
       text: !existing && this.opts.onset
-        ? `按上一晚 ${this.opts.onset} 填的，不准就在上面改`
-        : "记不准就选个整点，比空着强"
+        ? tr("edit.onsetSuggested", { onset: this.opts.onset })
+        : tr("edit.onsetTip")
     });
-    const wakeField = this.makeField(form, "起床时间", "text", "07:10", existing && isSleepType(existing.type) ? existing.wake : (this.opts.wake || ""));
-    this.attachPicker(wakeField, { kind: "time", title: "选择起床时间" });
-    const timeField = this.makeField(form, "时间", "text", "08:20", existing && !isSleepType(existing.type) ? existing.time : (this.opts.time || ""));
-    this.attachPicker(timeField, { kind: "time", title: "选择时间" });
+    const wakeField = this.makeField(form, tr("edit.wake"), "text", "07:10", existing && isSleepType(existing.type) ? existing.wake : (this.opts.wake || ""));
+    this.attachPicker(wakeField, { kind: "time", title: tr("edit.wakePicker") });
+    const timeField = this.makeField(form, tr("edit.time"), "text", "08:20", existing && !isSleepType(existing.type) ? existing.time : (this.opts.time || ""));
+    this.attachPicker(timeField, { kind: "time", title: tr("edit.timePicker") });
     // 提示词不能写死"吃了什么 / 食堂"：清单是他自己的，加了「用药」「午休」之后，
     // 记一笔吃药却被告知"吃了什么"，等于界面在替他猜这一条是什么
-    const noteField = this.makeField(form, this.opts.askNote ? "内容（可留空）" : "备注（可留空）", "text", "记一句", existing && !isSleepType(existing.type) ? existing.note : "");
+    const noteField = this.makeField(form, this.opts.askNote ? tr("edit.content") : tr("edit.note"), "text", tr("edit.notePh"), existing && !isSleepType(existing.type) ? existing.note : "");
 
     // 这一觉多长，边填边算：他常有"3 点醒、7 点才看手机"的情况，
     // 起床取的是点按钮的时刻，等保存完再发现多睡了四小时就晚了
@@ -2821,13 +3808,13 @@ var RecordEditModal = class extends import_obsidian.Modal {
       const onset = normalizeTimeText(onsetField.input.value);
       const wake = normalizeTimeText(wakeField.input.value);
       if (!onset || !wake) {
-        sleepPreview.setText("填完入睡和起床，这里会算出这一觉多长");
+        sleepPreview.setText(tr("edit.previewEmpty"));
         sleepPreview.removeClass("is-warn");
         return;
       }
       const min = sleepDuration(onset, wake);
       const odd = min < 90 || min > 840;
-      sleepPreview.setText(`这一觉 ${formatDuration(min)}（${onset} → ${wake}）` + (odd ? "——是不是有一头记错了？" : ""));
+      sleepPreview.setText(tr("edit.preview", { d: formatDuration(min), onset, wake }) + (odd ? tr("edit.previewOdd") : ""));
       sleepPreview.toggleClass("is-warn", odd);
     };
     for (const f of [onsetField, wakeField]) {
@@ -2838,7 +3825,7 @@ var RecordEditModal = class extends import_obsidian.Modal {
     const paintFields = () => {
       const isSleep = isSleepType(selected);
       // "入睡那晚"这个提醒只在选睡眠时才有意义，挂在所有类型上会让人以为所有记录都要填昨天
-      dateField.labelEl.setText(isSleep ? "日期（填入睡那晚）" : "日期");
+      dateField.labelEl.setText(isSleep ? tr("edit.dateSleep") : tr("edit.date"));
       onsetField.wrap.toggleClass("hr-hidden", !isSleep);
       wakeField.wrap.toggleClass("hr-hidden", !isSleep);
       timeField.wrap.toggleClass("hr-hidden", isSleep);
@@ -2850,7 +3837,7 @@ var RecordEditModal = class extends import_obsidian.Modal {
     paintFields();
 
     const btns = contentEl.createDiv({ cls: "hr-modal-btns" });
-    const save = btns.createEl("button", { cls: "hr-btn hr-btn-primary", text: "保存" });
+    const save = btns.createEl("button", { cls: "hr-btn hr-btn-primary", text: tr("edit.save") });
     save.addEventListener("click", () => {
       // 写入要等盘，手快两下就是两条一模一样的记录（手机上尤其容易）
       if (this.saving) return;
@@ -2862,7 +3849,7 @@ var RecordEditModal = class extends import_obsidian.Modal {
           save.disabled = false;
         });
     });
-    btns.createEl("button", { cls: "hr-btn hr-btn-ghost", text: "取消" }).addEventListener("click", () => this.close());
+    btns.createEl("button", { cls: "hr-btn hr-btn-ghost", text: tr("edit.cancel") }).addEventListener("click", () => this.close());
 
     // 移动端优先聚焦第一个输入框，但 iOS 上程序化聚焦会顶起键盘遮挡内容，只在桌面做
     if (!import_obsidian.Platform.isMobile) {
@@ -2959,30 +3946,30 @@ var RecordEditModal = class extends import_obsidian.Modal {
 
   async submit(existing, type, dateField, onsetField, wakeField, timeField, noteField) {
     const date = normalizeDateText(dateField.input.value || formatDate(new Date()));
-    if (!date) return this.fail(dateField, "日期格式应为 YYYY-MM-DD");
+    if (!date) return this.fail(dateField, tr("err.dateFormat"));
     // 日期框可以手打，光在日历里拦不住
-    if (date > formatDate(new Date())) return this.fail(dateField, "未来的日子还没有可记的");
+    if (date > formatDate(new Date())) return this.fail(dateField, tr("err.future"));
 
     if (existing && date !== existing.date) {
-      return this.fail(dateField, "修改记录不能换日期：请先删除，再补记到目标日期");
+      return this.fail(dateField, tr("err.changeDate"));
     }
 
     let record;
     if (isSleepType(type)) {
       const onset = normalizeTimeText(onsetField.input.value);
-      if (!onset) return this.fail(onsetField, "入睡时间格式应为 HH:MM");
+      if (!onset) return this.fail(onsetField, tr("err.onsetFormat"));
       const wakeRaw = wakeField.input.value.trim();
       let wake = "";
       if (wakeRaw !== "") {
         wake = normalizeTimeText(wakeRaw);
-        if (!wake) return this.fail(wakeField, "起床时间格式应为 HH:MM");
+        if (!wake) return this.fail(wakeField, tr("err.wakeFormat"));
       }
       // 两个时刻相同会被算成一整天，这种记录没有意义，直接让用户改一个
-      if (wake && wake === onset) return this.fail(wakeField, "起床与入睡是同一时刻，请检查");
+      if (wake && wake === onset) return this.fail(wakeField, tr("err.sameTime"));
       record = { type: T_SLEEP, onset, wake };
     } else {
       const time = normalizeTimeText(timeField.input.value);
-      if (!time) return this.fail(timeField, "时间格式应为 HH:MM");
+      if (!time) return this.fail(timeField, tr("err.timeFormat"));
       record = { type, time, note: noteField.input.value.trim() };
     }
 
@@ -2992,10 +3979,10 @@ var RecordEditModal = class extends import_obsidian.Modal {
       if (existing) await this.plugin.manager.updateRecord(existing, Object.assign(record, { date: existing.date }));
       else await this.plugin.manager.addRecord(Object.assign({ date }, record));
       this.close();
-      new import_obsidian.Notice(existing ? "已修改" : "已记录");
+      new import_obsidian.Notice(existing ? tr("edit.updated") : tr("edit.recorded"));
       this.plugin.refreshAllViews();
     } catch (e) {
-      this.fail(dateField, e && e.message ? e.message : "保存失败");
+      this.fail(dateField, e && e.message ? e.message : tr("edit.saveFail"));
     }
   }
 
@@ -3036,10 +4023,10 @@ var TypeManagerModal = class extends import_obsidian.Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.addClass("hr-types");
-    contentEl.createEl("h2", { text: "记录类型", cls: "hr-modal-title" });
+    contentEl.createEl("h2", { text: tr("types.title"), cls: "hr-modal-title" });
     contentEl.createDiv({
       cls: "hr-field-note",
-      text: "睡眠固定记「入睡 + 起床」两个时刻，其余都是计数型。类型名就是写进 Markdown 的那一列，改名等于换一个新类型，所以只能删不能改。"
+      text: tr("types.intro")
     });
     this.listEl = contentEl.createDiv({ cls: "hr-type-list" });
     this.buildNewRow(contentEl.createDiv({ cls: "hr-type-new" }));
@@ -3047,11 +4034,11 @@ var TypeManagerModal = class extends import_obsidian.Modal {
   }
 
   summaryOf(meta) {
-    if (meta.group === "sleep") return "双时刻类型 · 锁定";
+    if (meta.group === "sleep") return tr("types.sleepSummary");
     const slot = HUE_PALETTE.find((s) => s.hue === meta.hue);
     // 只写"跟默认不一样的地方"：每个计数类型都能切成问内容，把"只计数"当成状态写在
     // 每一行末尾，读起来像这类东西只能计数，得点开才知道其实可以换
-    return [meta.on === false ? "已隐藏" : "", meta.ask ? "记时问内容" : "", slot ? slot.name : ""].filter(Boolean).join(" · ") || "计数类型";
+    return [meta.on === false ? tr("types.hidden") : "", meta.ask ? tr("types.askSummary") : "", slot ? slot.name : ""].filter(Boolean).join(" · ") || tr("types.countSummary");
   }
 
   paint() {
@@ -3067,7 +4054,7 @@ var TypeManagerModal = class extends import_obsidian.Modal {
       icon.style.setProperty("--hue", String(meta.hue));
       paintIcon(icon, meta.icon, "circle");
       const info = head.createDiv({ cls: "hr-type-info" });
-      info.createDiv({ cls: "hr-type-name", text: item.name });
+      info.createDiv({ cls: "hr-type-name", text: typeLabel(item.name) });
       info.createDiv({ cls: "hr-type-sub", text: this.summaryOf(meta) });
       if (locked) continue;
       // 顺序就是快记网格与周表的列序。做上下两枚箭头而不是拖拽：手机上的长按拖动
@@ -3081,7 +4068,7 @@ var TypeManagerModal = class extends import_obsidian.Modal {
         }
         return -1;
       };
-      for (const [icon, label, step] of [["chevron-up", "上移", -1], ["chevron-down", "下移", 1]]) {
+      for (const [icon, label, step] of [["chevron-up", tr("types.moveUp"), -1], ["chevron-down", tr("types.moveDown"), 1]]) {
         const moveBtn = moves.createEl("button", { cls: "hr-move-btn", attr: { type: "button", "aria-label": label, title: label } });
         paintIcon(moveBtn, icon, "chevron");
         const to = neighbor(step);
@@ -3110,10 +4097,10 @@ var TypeManagerModal = class extends import_obsidian.Modal {
   buildOptions(row, item, meta) {
     const body = row.createDiv({ cls: "hr-type-body" });
 
-    body.createDiv({ cls: "hr-opt-label", text: "图标" });
+    body.createDiv({ cls: "hr-opt-label", text: tr("types.icon") });
     const icons = body.createDiv({ cls: "hr-icon-pick" });
     for (const name of ICON_CHOICES) {
-      const btn = icons.createEl("button", { cls: "hr-icon-opt" + (name === meta.icon ? " is-on" : ""), attr: { type: "button", "aria-label": "图标 " + name } });
+      const btn = icons.createEl("button", { cls: "hr-icon-opt" + (name === meta.icon ? " is-on" : ""), attr: { type: "button", "aria-label": tr("types.iconAria", { name }) } });
       paintIcon(btn, name, "circle");
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -3122,7 +4109,7 @@ var TypeManagerModal = class extends import_obsidian.Modal {
       });
     }
 
-    body.createDiv({ cls: "hr-opt-label", text: "颜色" });
+    body.createDiv({ cls: "hr-opt-label", text: tr("types.color") });
     const hues = body.createDiv({ cls: "hr-hue-pick" });
     for (const slot of HUE_PALETTE) {
       const dot = hues.createEl("button", { cls: "hr-hue-opt" + (slot.hue === meta.hue ? " is-on" : ""), attr: { type: "button", "aria-label": slot.name, title: slot.name } });
@@ -3135,17 +4122,17 @@ var TypeManagerModal = class extends import_obsidian.Modal {
     }
 
     const acts = body.createDiv({ cls: "hr-type-acts" });
-    acts.createEl("button", { cls: "hr-mini-btn", text: meta.on === false ? "显示出来" : "先隐藏" , attr: { type: "button" } })
+    acts.createEl("button", { cls: "hr-mini-btn", text: meta.on === false ? tr("types.show") : tr("types.hide"), attr: { type: "button" } })
       .addEventListener("click", async () => {
         item.on = meta.on === false;
         await this.commit();
       });
-    acts.createEl("button", { cls: "hr-mini-btn" + (item.ask ? " is-on" : ""), text: item.ask ? "不问内容" : "问内容", attr: { type: "button" } })
+    acts.createEl("button", { cls: "hr-mini-btn" + (item.ask ? " is-on" : ""), text: item.ask ? tr("types.noAsk") : tr("types.ask"), attr: { type: "button" } })
       .addEventListener("click", async () => {
         item.ask = !item.ask;
         await this.commit();
       });
-    const del = acts.createEl("button", { cls: "hr-mini-btn is-del" + (this.pendingDelete === item.name ? " is-armed" : ""), text: this.pendingDelete === item.name ? "确认删除" : "删除", attr: { type: "button" } });
+    const del = acts.createEl("button", { cls: "hr-mini-btn is-del" + (this.pendingDelete === item.name ? " is-armed" : ""), text: this.pendingDelete === item.name ? tr("types.confirmDelete") : tr("types.delete"), attr: { type: "button" } });
     del.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (this.pendingDelete !== item.name) {
@@ -3160,7 +4147,7 @@ var TypeManagerModal = class extends import_obsidian.Modal {
       await this.commit();
     });
     if (this.pendingDelete === item.name) {
-      body.createDiv({ cls: "hr-opt-note", text: `再点一次「确认删除」。文件里已有的「${item.name}」行原样留着，只是不再被读出来统计。` });
+      body.createDiv({ cls: "hr-opt-note", text: tr("types.deleteNote", { name: typeLabel(item.name) }) });
     }
   }
 
@@ -3173,19 +4160,20 @@ var TypeManagerModal = class extends import_obsidian.Modal {
   }
 
   buildNewRow(host) {
-    host.createDiv({ cls: "hr-opt-label", text: "新建计数类型" });
+    host.createDiv({ cls: "hr-opt-label", text: tr("types.newLabel") });
     const line = host.createDiv({ cls: "hr-type-newline" });
-    const input = line.createEl("input", { cls: "hr-row-input", attr: { type: "text", placeholder: "名字，例如 运动 / 吃药", maxlength: "8" } });
-    const add = line.createEl("button", { cls: "hr-mini-btn is-primary", text: "添加", attr: { type: "button" } });
+    const input = line.createEl("input", { cls: "hr-row-input", attr: { type: "text", placeholder: tr("types.newPh"), maxlength: "8" } });
+    const add = line.createEl("button", { cls: "hr-mini-btn is-primary", text: tr("types.add"), attr: { type: "button" } });
     const doAdd = async () => {
-      const name = sanitizeTypeName(input.value);
-      if (!name) return new import_obsidian.Notice(LOG + "类型名为空");
-      if (isKnownType(name)) return new import_obsidian.Notice(LOG + `「${name}」已经存在`);
+      const typed = sanitizeTypeName(input.value);
+      if (!typed) return new import_obsidian.Notice(LOG + tr("types.emptyName"));
+      const name = builtinKeyOf(typed) || typed;
+      if (isKnownType(resolveTypeName(typed))) return new import_obsidian.Notice(LOG + tr("types.exists", { name: typed }));
       const used = this.plugin.settings.types.length;
-      this.plugin.settings.types = this.plugin.normalizeTypes([...this.plugin.settings.types, { name, icon: "activity", short: name.slice(0, 2), hue: HUE_PALETTE[used % HUE_PALETTE.length].hue, ask: false }]);
+      this.plugin.settings.types = this.plugin.normalizeTypes([...this.plugin.settings.types, { name, icon: "activity", short: (builtinKeyOf(typed) ? undefined : name.slice(0, 2)), hue: HUE_PALETTE[used % HUE_PALETTE.length].hue, ask: false }]);
       // normalizeTypes 有 16 项上限，超了会静默丢掉——不回头查一遍就会提示"已添加"其实没加上
       if (!this.plugin.settings.types.some((t) => t.name === name)) {
-        new import_obsidian.Notice(LOG + "类型最多 16 个，先删掉几个再加");
+        new import_obsidian.Notice(LOG + tr("types.limit"));
         return;
       }
       this.openName = name;
@@ -3193,14 +4181,14 @@ var TypeManagerModal = class extends import_obsidian.Modal {
       // 走 commit 而不是自己 saveSettings：提示写着"点网格里的格子即可记录"，
       // 不刷视图的话那个格子要等弹窗关掉才出现
       await this.commit();
-      new import_obsidian.Notice(`已添加「${name}」，点网格里的格子即可记录`);
+      new import_obsidian.Notice(tr("types.added", { name: typeLabel(name) }));
     };
     add.addEventListener("click", () => void doAdd());
     // 手机上输入法回车是"上屏"不是"提交"，isComposing 判断必须留着，否则选词时会误提交
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) void doAdd();
     });
-    host.createDiv({ cls: "hr-opt-note", text: "名字最多 8 个字，不能含竖线。全部类型合计最多 16 个（含睡眠），加完想换图标和颜色，点它的名字展开就有。" });
+    host.createDiv({ cls: "hr-opt-note", text: tr("types.newNote") });
   }
 
   onClose() {
@@ -3263,15 +4251,15 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
     containerEl.empty();
 
     // ---------- 显示 ----------
-    const displayEl = settingsSection(containerEl, "显示");
+    const displayEl = settingsSection(containerEl, tr("settings.display"));
     // 周一打开"本周"只有一格、月底打开"本月"要翻半天才看到今天，都是日历切法的代价；
     // 但"这周过得怎么样"确实有人要按日历算，所以做成一道选择而不是一处聪明
     new import_obsidian.Setting(displayEl)
-      .setName("本周 / 本月怎么算")
-      .setDesc("动态：近 7 天、近 30 天，窗口永远以今天收尾，周一打开也是完整一周。按日历：本周从周一到周日、本月从 1 号到今天，和日历对得上。")
+      .setName(tr("settings.range.name"))
+      .setDesc(tr("settings.range.desc"))
       .addDropdown((drop) => drop
-        .addOption("rolling", "动态（近 7 天 / 近 30 天）")
-        .addOption("calendar", "按日历（本周 / 本月）")
+        .addOption("rolling", tr("settings.range.rolling"))
+        .addOption("calendar", tr("settings.range.calendar"))
         .setValue(this.plugin.settings.rangeMode)
         .onChange(async (value) => {
           this.plugin.settings.rangeMode = value;
@@ -3280,17 +4268,17 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
         }));
 
     // ---------- 归档与位置 ----------
-    const storageEl = settingsSection(containerEl, "归档与位置");
+    const storageEl = settingsSection(containerEl, tr("settings.storage"));
     // 示例文件名跟着当前年月走：写死"2026-10月"过两个月就成了旧数字
     const now = new Date();
     const egYear = now.getFullYear();
     const egMonth = `${egYear}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     new import_obsidian.Setting(storageEl)
-      .setName("归档周期")
-      .setDesc("切换只决定以后往哪个文件下笔，老文件原样留着、照样读得出来。")
+      .setName(tr("settings.period.name"))
+      .setDesc(tr("settings.period.desc"))
       .addDropdown((drop) => drop
-        .addOption("month", `按月（${egMonth}月健康记录.md）`)
-        .addOption("year", `按年（${egYear}年健康记录.md）`)
+        .addOption("month", tr("settings.period.month", { name: recordFileNameFor(`${egMonth}-01`, "month", I18N_LANG) }))
+        .addOption("year", tr("settings.period.year", { name: recordFileNameFor(`${egYear}-01-01`, "year", I18N_LANG) }))
         .setValue(this.plugin.settings.archivePeriod)
         .onChange(async (value) => {
           this.plugin.settings.archivePeriod = value;
@@ -3308,17 +4296,17 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
       folderDrop.selectEl.empty();
       let hasCurrent = false;
       for (const entry of groups) {
-        folderDrop.addOption(entry.folder, entry.folder || "仓库根目录");
+        folderDrop.addOption(entry.folder, entry.folder || tr("settings.root"));
         if (entry.folder === current) hasCurrent = true;
       }
       if (!hasCurrent) {
-        folderDrop.addOption(current, (current || "仓库根目录") + "（当前，第一次记录时自动创建）");
+        folderDrop.addOption(current, (current || tr("settings.root")) + tr("settings.currentAuto"));
       }
       folderDrop.setValue(current);
     };
     new import_obsidian.Setting(storageEl)
-      .setName("记录位置")
-      .setDesc("记录文件放在哪个目录。按内容特征查找用右侧「重新扫描」（文件名以年份开头、里面有日期分区和记录行）；找到一处自动定位，找到多处在这里点选。换目录只决定以后往哪儿下笔，老文件原样留着。")
+      .setName(tr("settings.folder.name"))
+      .setDesc(tr("settings.folder.desc"))
       .addDropdown((drop) => {
         folderDrop = drop;
         drop.onChange(async (value) => {
@@ -3330,23 +4318,23 @@ var HealthRecordSettingTab = class extends import_obsidian.PluginSettingTab {
         });
       })
       .addButton((btn) => {
-        btn.setButtonText("重新扫描");
+        btn.setButtonText(tr("settings.rescan"));
         btn.onClick(async () => {
           // 扫描要读每个候选文件，手机上可能卡一下：按钮先变灰，免得以为没响应
-          btn.setButtonText("扫描中…");
+          btn.setButtonText(tr("settings.scanning"));
           btn.setDisabled(true);
           try {
             lastHits = await this.plugin.scanRecordFiles();
             // 扫描出来在哪就是在哪：只有一处有记录文件时直接认下来，不再让他确认一遍
             if (await this.plugin.adoptScannedFolder(lastHits)) {
-              new import_obsidian.Notice("已按扫描结果定位记录文件");
+              new import_obsidian.Notice(tr("settings.adopted"));
             }
             renderFolderOptions(lastHits);
           } catch (e) {
             console.error(LOG + "扫描失败:", e);
-            new import_obsidian.Notice(LOG + "扫描失败");
+            new import_obsidian.Notice(LOG + tr("settings.scanFail"));
           }
-          btn.setButtonText("重新扫描");
+          btn.setButtonText(tr("settings.rescan"));
           btn.setDisabled(false);
         });
       });
@@ -3384,6 +4372,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   }
 
   async onload() {
+    applyLanguage();
     await this.loadSettings();
     this.manager = new RecordManager(this.app, this.settings, () => {
       void this.saveSettings();
@@ -3396,16 +4385,16 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     };
 
     this.registerView(VIEW_TYPE_HEALTH, (leaf) => new HealthRecordView(leaf, this));
-    this.addRibbonIcon("activity", "健康记录", () => void this.activateView());
+    this.addRibbonIcon("activity", tr("ribbon.open"), () => void this.activateView());
 
-    this.addCommand({ id: "open-health-record", name: "打开健康记录", callback: () => void this.activateView() });
+    this.addCommand({ id: "open-health-record", name: tr("cmd.open"), callback: () => void this.activateView() });
     this.registerTypeCommands();
-    this.addCommand({ id: "record-sleep-onset", name: "记录入睡", callback: () => void this.recordOnset() });
-    this.addCommand({ id: "record-sleep-wake", name: "记录起床", callback: () => void this.recordWake() });
-    this.addCommand({ id: "record-last-night-sleep", name: "记昨晚的睡眠（补记）", callback: () => this.openSleepMakeup() });
-    this.addCommand({ id: "undo-last-record", name: "撤销上一条记录", callback: () => void this.undoLast() });
-    this.addCommand({ id: "add-record-manually", name: "补记一条", callback: () => this.openManual() });
-    this.addCommand({ id: "open-current-record-file", name: "打开当前记录文件", callback: () => void this.openCurrentFile() });
+    this.addCommand({ id: "record-sleep-onset", name: tr("cmd.sleepOnset"), callback: () => void this.recordOnset() });
+    this.addCommand({ id: "record-sleep-wake", name: tr("cmd.sleepWake"), callback: () => void this.recordWake() });
+    this.addCommand({ id: "record-last-night-sleep", name: tr("cmd.lastNight"), callback: () => this.openSleepMakeup() });
+    this.addCommand({ id: "undo-last-record", name: tr("cmd.undo"), callback: () => void this.undoLast() });
+    this.addCommand({ id: "add-record-manually", name: tr("cmd.manual"), callback: () => this.openManual() });
+    this.addCommand({ id: "open-current-record-file", name: tr("cmd.openFile"), callback: () => void this.openCurrentFile() });
 
     this.registerEvent(this.app.vault.on("modify", (file) => this.handleFileChange(file, false)));
     this.registerEvent(this.app.vault.on("create", (file) => this.handleFileChange(file, true)));
@@ -3449,6 +4438,8 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
       console.error(LOG + "设置读取失败，改用默认值:", e);
     }
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded || {});
+    // 全新安装才按界面语言取默认目录；老用户存过的（含默认的「健康记录」）一律不动
+    if (!loaded) this.settings.storageFolder = FILE_FORMATS[I18N_LANG].folder;
     this.settings.storageFolder = this.sanitizeFolder(this.settings.storageFolder);
     if (!["month", "year"].includes(this.settings.archivePeriod)) this.settings.archivePeriod = "month";
     if (!["rolling", "calendar"].includes(this.settings.rangeMode)) this.settings.rangeMode = "rolling";
@@ -3514,12 +4505,12 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     // 只登记"此刻还在类型清单里"的那几个：默认清单瘦身成睡眠 + 水之后，
     // 命令面板里留五条点了只会弹「类型不存在」的死命令是说不过去的
     const quickCommands = [
-      [T_WATER, "record-water", "记一杯水"],
-      [T_TOILET, "record-toilet", "记一次如厕"],
-      [T_BREAKFAST, "record-breakfast", "记早餐"],
-      [T_LUNCH, "record-lunch", "记午餐"],
-      [T_DINNER, "record-dinner", "记晚餐"],
-      [T_SNACK, "record-snack", "记加餐"]
+      [T_WATER, "record-water", tr("cmd.recordWater")],
+      [T_TOILET, "record-toilet", tr("cmd.recordToilet")],
+      [T_BREAKFAST, "record-breakfast", tr("cmd.recordBreakfast")],
+      [T_LUNCH, "record-lunch", tr("cmd.recordLunch")],
+      [T_DINNER, "record-dinner", tr("cmd.recordDinner")],
+      [T_SNACK, "record-snack", tr("cmd.recordSnack")]
     ];
     for (const [type, id, name] of quickCommands) {
       if (TYPE_MAP[type] && !this._typeCmdRegistered.has(id)) {
@@ -3543,7 +4534,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
       await this._saveChain;
     } catch (e) {
       console.error(LOG + "设置保存失败:", e);
-      new import_obsidian.Notice(LOG + "设置保存失败");
+      new import_obsidian.Notice(LOG + tr("notice.saveFail"));
     }
   }
 
@@ -3600,7 +4591,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     if (!raw) return "";
     const v = String(raw).trim().replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
     if (v.includes("/../") || v === ".." || v.startsWith("../") || v.endsWith("/..")) {
-      new import_obsidian.Notice(LOG + "存储目录不允许包含 .. 段");
+      new import_obsidian.Notice(LOG + tr("notice.noDotDot"));
       return "";
     }
     return v;
@@ -3666,7 +4657,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     let leaf = workspace.getRightLeaf(false);
     if (!leaf) leaf = workspace.getLeaf(true);
     if (!leaf) {
-      new import_obsidian.Notice(LOG + "无法打开视图，请重启 Obsidian 后重试");
+      new import_obsidian.Notice(LOG + tr("notice.openViewFail"));
       return;
     }
     await leaf.setViewState({ type: VIEW_TYPE_HEALTH, active: true });
@@ -3681,7 +4672,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
    */
   async quickRecord(type) {
     if (!isKnownType(type) || isSleepType(type)) {
-      new import_obsidian.Notice(LOG + "类型不存在：" + type);
+      new import_obsidian.Notice(LOG + tr("notice.noType", { type: typeLabel(type) }));
       return;
     }
     const today = formatDate(new Date());
@@ -3697,7 +4688,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
       this.refreshAllViews();
     } catch (e) {
       console.error(LOG + "记录失败:", e);
-      new import_obsidian.Notice(LOG + "记录失败：" + (e && e.message ? e.message : e));
+      new import_obsidian.Notice(LOG + tr("notice.recordFail", { msg: e && e.message ? e.message : e }));
     }
   }
 
@@ -3714,24 +4705,24 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
     try {
       const records = await this.manager.loadRange(formatDate(addDays(now, -2)), date);
       if (this.manager.hasOnsetForDate(records, date)) {
-        new import_obsidian.Notice(LOG + (date === today ? "今晚的入睡已经记过了" : "昨晚的入睡已经记过了"));
+        new import_obsidian.Notice(LOG + (date === today ? tr("notice.onsetDoneTonight") : tr("notice.onsetDoneLastNight")));
         return;
       }
       // 已经记全的那一晚（有入睡也有起床）再点一次，会挂出一条把整晚顶掉的待起床；
       // 分段睡眠没有建模（2026-10-20 已定），这里直接拦住，让他去补记里改
       const complete = records.find((r) => isSleepType(r.type) && r.date === date && r.wake && !r.unregistered);
       if (complete) {
-        new import_obsidian.Notice(LOG + `这一晚已经记全了（${complete.onset} → ${complete.wake}），要补请用补记`);
+        new import_obsidian.Notice(LOG + tr("notice.nightComplete", { onset: complete.onset, wake: complete.wake }));
         return;
       }
       const record = { date, type: T_SLEEP, onset, wake: "" };
       await this.manager.addRecord(record);
       this._lastWrite = { date, srcText: formatRecordLine(record), type: T_SLEEP };
-      new import_obsidian.Notice(date === today ? `入睡 ${onset}` : `记在 ${formatDateLabel(date)} 那一晚：入睡 ${onset}`);
+      new import_obsidian.Notice(date === today ? tr("notice.onset", { onset }) : tr("notice.onsetOther", { date: formatDateLabel(date), onset }));
       this.refreshAllViews();
     } catch (e) {
       console.error(LOG + "记录入睡失败:", e);
-      new import_obsidian.Notice(LOG + "记录失败：" + (e && e.message ? e.message : e));
+      new import_obsidian.Notice(LOG + tr("notice.recordFail", { msg: e && e.message ? e.message : e }));
     }
   }
 
@@ -3743,7 +4734,7 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
         // 有一条过了时限的"只有入睡"：先修它。再开一晚只会又写出一条孤零零的入睡
         const stale = await this.manager.findStalePending(today);
         if (stale) {
-          new import_obsidian.Notice(LOG + "这一晚的起床一直没记，先把这一条补上");
+          new import_obsidian.Notice(LOG + tr("notice.staleFirst"));
           new RecordEditModal(this.app, this, { existing: stale }).open();
           return;
         }
@@ -3755,27 +4746,27 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
       if (time === pending.onset) {
         // 同一分钟内点完入睡又点起床，算出来会是 24 小时。上一版先写后提示，
         // 等于"警告归警告，假数据已经落盘"；现在一个字都不写，直接打开那一条让人改时刻
-        new import_obsidian.Notice(LOG + "入睡与起床同为 " + time + "，先把入睡时刻改一下");
+        new import_obsidian.Notice(LOG + tr("notice.sameMinute", { time }));
         new RecordEditModal(this.app, this, { existing: pending }).open();
         return;
       }
       await this.manager.updateRecord(pending, { type: T_SLEEP, onset: pending.onset, wake: time });
-      new import_obsidian.Notice(`起床 ${time}`);
+      new import_obsidian.Notice(tr("notice.wake", { time }));
       this.refreshAllViews();
     } catch (e) {
       console.error(LOG + "记录起床失败:", e);
-      new import_obsidian.Notice(LOG + "记录失败：" + (e && e.message ? e.message : e));
+      new import_obsidian.Notice(LOG + tr("notice.recordFail", { msg: e && e.message ? e.message : e }));
     }
   }
 
   async removeRecord(record) {
     try {
       await this.manager.removeRecord(record);
-      new import_obsidian.Notice("已删除");
+      new import_obsidian.Notice(tr("notice.deleted"));
       this.refreshAllViews();
     } catch (e) {
       console.error(LOG + "删除失败:", e);
-      new import_obsidian.Notice(LOG + (e && e.message ? e.message : "删除失败"));
+      new import_obsidian.Notice(LOG + (e && e.message ? e.message : tr("notice.deleteFail")));
       this.refreshAllViews();
     }
   }
@@ -3784,20 +4775,20 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   async undoLast() {
     const last = this._lastWrite;
     if (!last) {
-      new import_obsidian.Notice(LOG + "没有可撤销的记录");
+      new import_obsidian.Notice(LOG + tr("notice.nothingToUndo"));
       return;
     }
     try {
       const records = await this.manager.loadRange(last.date, last.date);
-      const match = records.find((r) => r.srcText === last.srcText);
-      if (!match) throw new Error("该记录已被修改或删除");
+      const match = records.find((r) => !r.unregistered && formatRecordLine(r) === last.srcText);
+      if (!match) throw new Error(tr("notice.undoGone"));
       await this.manager.removeRecord(match);
       this._lastWrite = null;
-      new import_obsidian.Notice("已撤销");
+      new import_obsidian.Notice(tr("notice.undone"));
       this.refreshAllViews();
     } catch (e) {
       console.error(LOG + "撤销失败:", e);
-      new import_obsidian.Notice(LOG + (e && e.message ? e.message : "撤销失败"));
+      new import_obsidian.Notice(LOG + (e && e.message ? e.message : tr("notice.undoFail")));
       this._lastWrite = null;
     }
   }
@@ -3837,11 +4828,11 @@ var HealthRecordPlugin = class extends import_obsidian.Plugin {
   async openCurrentFile() {
     try {
       const path = await this.manager.resolveWritePath(formatDate(new Date()));
-      const { file } = await this.manager.ensureFile(path, fileIntro());
+      const { file } = await this.manager.ensureFile(path, fileIntro(fileLangFromPath(path)));
       await this.app.workspace.getLeaf(false).openFile(file);
     } catch (e) {
       console.error(LOG + "打开记录文件失败:", e);
-      new import_obsidian.Notice(LOG + "打开记录文件失败：" + (e && e.message ? e.message : e));
+      new import_obsidian.Notice(LOG + tr("notice.openFileFail", { msg: e && e.message ? e.message : e }));
     }
   }
 };
