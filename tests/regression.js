@@ -805,6 +805,7 @@ function sampleFile(body) {
   await test("类型名截断：默认 8 字，可放宽以便先认出 Breakfast", async () => {
     assert.equal(T.sanitizeTypeName("Breakfast"), "Breakfas");
     assert.equal(T.sanitizeTypeName("Breakfast", 16), "Breakfast");
+    assert.equal(T.sanitizeTypeName("跑步跑步跑步跑\u3000多"), "跑步跑步跑步跑", "截断后不留全角空格尾巴");
     assert.equal(S.builtinKeyOf(T.sanitizeTypeName("Breakfast", 16)), "早餐");
   });
 

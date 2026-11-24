@@ -4241,7 +4241,7 @@ var DEFAULT_SETTINGS = {
 
 /** 类型名要写进 markdown 的列，所以竖线、换行、首尾空格都不允许 */
 function sanitizeTypeName(raw, max = 8) {
-  const name = String(raw || "").split("").filter((ch) => ch !== "|" && ch.charCodeAt(0) > 32).join("").trim().slice(0, max);
+  const name = String(raw || "").split("").filter((ch) => ch !== "|" && ch.charCodeAt(0) > 32).join("").trim().slice(0, max).trim();
   return name;
 }
 
