@@ -4,7 +4,7 @@
 
 安装：Obsidian 设置 → 第三方插件 → 浏览，搜「Health Record」→ 安装启用。手动安装方式见[文末](#安装)。
 
-## English
+## Health Record
 
 An Obsidian plugin for logging sleep and custom habits from a sidebar view, with day / week / month reviews. All data is plain Markdown in the vault — no network access, no account.
 
