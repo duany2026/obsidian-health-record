@@ -1043,7 +1043,7 @@ var LEGEND_MARKS = FILE_LANGS.map((l) => FILE_FORMATS[l].mark);
 var BUILTIN_NAMES = {
   "睡眠": { "zh-CN": "睡眠", "zh-TW": "睡眠", en: "Sleep" },
   "水": { "zh-CN": "水", "zh-TW": "水", en: "Water" },
-  "如厕": { "zh-CN": "如厕", "zh-TW": "如廁", en: "Bathroom" },
+  "如厕": { "zh-CN": "如厕", "zh-TW": "如廁", en: "Toilet" },
   "早餐": { "zh-CN": "早餐", "zh-TW": "早餐", en: "Breakfast" },
   "午餐": { "zh-CN": "午餐", "zh-TW": "午餐", en: "Lunch" },
   "晚餐": { "zh-CN": "晚餐", "zh-TW": "晚餐", en: "Dinner" },
