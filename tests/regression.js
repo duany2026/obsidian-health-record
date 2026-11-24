@@ -798,6 +798,12 @@ function sampleFile(body) {
     assert.equal(S.pickUndoMatch(recs, "- 水 | 09:00"), null);
   });
 
+  await test("类型名截断：默认 8 字，可放宽以便先认出 Breakfast", async () => {
+    assert.equal(T.sanitizeTypeName("Breakfast"), "Breakfas");
+    assert.equal(T.sanitizeTypeName("Breakfast", 16), "Breakfast");
+    assert.equal(S.builtinKeyOf(T.sanitizeTypeName("Breakfast", 16)), "早餐");
+  });
+
   console.log("通过 " + passed + " 项，失败 " + failures.length + " 项");
   if (failures.length) process.exitCode = 1;
 })();

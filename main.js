@@ -4178,15 +4178,18 @@ var TypeManagerModal = class extends import_obsidian.Modal {
   buildNewRow(host) {
     host.createDiv({ cls: "hr-opt-label", text: tr("types.newLabel") });
     const line = host.createDiv({ cls: "hr-type-newline" });
-    const input = line.createEl("input", { cls: "hr-row-input", attr: { type: "text", placeholder: tr("types.newPh"), maxlength: "8" } });
+    const input = line.createEl("input", { cls: "hr-row-input", attr: { type: "text", placeholder: tr("types.newPh"), maxlength: "16" } });
     const add = line.createEl("button", { cls: "hr-mini-btn is-primary", text: tr("types.add"), attr: { type: "button" } });
     const doAdd = async () => {
-      const typed = sanitizeTypeName(input.value);
+      // 先按全长认内置类型的英文写法（Breakfast 有 9 个字母），认不出才截成 8 字的自建名
+      const full = sanitizeTypeName(input.value, 16);
+      const builtin = builtinKeyOf(full);
+      const typed = builtin ? full : sanitizeTypeName(full);
       if (!typed) return new import_obsidian.Notice(LOG + tr("types.emptyName"));
-      const name = builtinKeyOf(typed) || typed;
-      if (isKnownType(resolveTypeName(typed))) return new import_obsidian.Notice(LOG + tr("types.exists", { name: typed }));
+      const name = builtin || typed;
+      if (isKnownType(resolveTypeName(name))) return new import_obsidian.Notice(LOG + tr("types.exists", { name: typed }));
       const used = this.plugin.settings.types.length;
-      this.plugin.settings.types = this.plugin.normalizeTypes([...this.plugin.settings.types, { name, icon: "activity", short: (builtinKeyOf(typed) ? undefined : name.slice(0, 2)), hue: HUE_PALETTE[used % HUE_PALETTE.length].hue, ask: false }]);
+      this.plugin.settings.types = this.plugin.normalizeTypes([...this.plugin.settings.types, { name, icon: "activity", short: (builtin ? undefined : name.slice(0, 2)), hue: HUE_PALETTE[used % HUE_PALETTE.length].hue, ask: false }]);
       // normalizeTypes 有 16 项上限，超了会静默丢掉——不回头查一遍就会提示"已添加"其实没加上
       if (!this.plugin.settings.types.some((t) => t.name === name)) {
         new import_obsidian.Notice(LOG + tr("types.limit"));
@@ -4235,8 +4238,8 @@ var DEFAULT_SETTINGS = {
 };
 
 /** 类型名要写进 markdown 的列，所以竖线、换行、首尾空格都不允许 */
-function sanitizeTypeName(raw) {
-  const name = String(raw || "").split("").filter((ch) => ch !== "|" && ch.charCodeAt(0) > 32).join("").trim().slice(0, 8);
+function sanitizeTypeName(raw, max = 8) {
+  const name = String(raw || "").split("").filter((ch) => ch !== "|" && ch.charCodeAt(0) > 32).join("").trim().slice(0, max);
   return name;
 }
 
