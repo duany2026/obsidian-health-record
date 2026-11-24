@@ -3786,7 +3786,8 @@ var RecordEditModal = class extends import_obsidian.Modal {
 
     const dateField = this.makeField(form, tr("edit.dateSleep"), "text", "YYYY-MM-DD", existing ? existing.date : this.opts.date);
     this.attachPicker(dateField, { kind: "date", title: tr("picker.dateTitle") });
-    const onsetField = this.makeField(form, tr("edit.onset"), "text", "23:40", existing && isSleepType(existing.type) ? existing.onset : (this.opts.onset || ""));
+    // 新记录直接填默认值而不是只摆 placeholder——看起来像已填，存的时候却报「Bedtime must be HH:MM」
+    const onsetField = this.makeField(form, tr("edit.onset"), "text", "23:40", existing && isSleepType(existing.type) ? existing.onset : (this.opts.onset || "23:40"));
     this.attachPicker(onsetField, {
       kind: "time",
       title: tr("edit.onsetPicker"),
@@ -3806,7 +3807,7 @@ var RecordEditModal = class extends import_obsidian.Modal {
         ? tr("edit.onsetSuggested", { onset: this.opts.onset })
         : tr("edit.onsetTip")
     });
-    const wakeField = this.makeField(form, tr("edit.wake"), "text", "07:10", existing && isSleepType(existing.type) ? existing.wake : (this.opts.wake || ""));
+    const wakeField = this.makeField(form, tr("edit.wake"), "text", "07:10", existing && isSleepType(existing.type) ? existing.wake : (this.opts.wake || "07:10"));
     this.attachPicker(wakeField, { kind: "time", title: tr("edit.wakePicker") });
     const timeField = this.makeField(form, tr("edit.time"), "text", "08:20", existing && !isSleepType(existing.type) ? existing.time : (this.opts.time || ""));
     this.attachPicker(timeField, { kind: "time", title: tr("edit.timePicker") });
